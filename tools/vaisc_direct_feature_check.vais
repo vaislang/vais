@@ -7622,6 +7622,34 @@ fn write_list_else_if_hoist(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_tuple_mixed_direct(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn split_head(s: Str) -> (Str, Int) {")
+    append_line(out, "    return (s, s.len())")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let (head, n) = split_head(\"vais\")")
+    append_line(out, "    if head != \"vais\" { return 1 }")
+    append_line(out, "    return n * 10 + 2")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_take_direct(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Int> = [30, 5, 99]")
+    append_line(out, "    let mut sum = 0")
+    append_line(out, "    for x in xs.take(2) {")
+    append_line(out, "        sum += x")
+    append_line(out, "    }")
+    append_line(out, "    let two = xs.take(2)")
+    append_line(out, "    return sum + two.len() + 5")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_enum_map_pipeline(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -7904,6 +7932,8 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
     else if str_contains(name, "str_len_reassigned_match_transform") == 1 { wrote = write_str_len_reassigned_match_transform(src) }
     else if str_contains(name, "map_str_str_get_opt_str_transforms") == 1 { wrote = write_map_str_str_get_opt_str_transforms(src) }
     else if str_contains(name, "enum_map_pipeline") == 1 { wrote = write_enum_map_pipeline(src) }
+    else if str_contains(name, "tuple_mixed_direct") == 1 { wrote = write_tuple_mixed_direct(src) }
+    else if str_contains(name, "take_direct") == 1 { wrote = write_take_direct(src) }
     else if str_contains(name, "enumerate_destructuring") == 1 { wrote = write_enumerate_destructuring(src) }
     else if str_contains(name, "expr_body_argv_pipeline") == 1 { wrote = write_expr_body_argv_pipeline(src) }
     else if str_contains(name, "collect_methods") == 1 { wrote = write_collect_methods(src) }
@@ -8170,6 +8200,10 @@ fn expect_case(vaisc: Str, tmp: Str, name: Str, pass_label: Str, shape: Int) -> 
         ok = str_contains(text, "__vais_str_split_lines_into")
     } else if shape == 242 {
         ok = str_contains(text, "__vais_str_join")
+    } else if shape == 243 {
+        ok = str_contains(text, "%struct.VaisTuple_split_head = type { ptr, i64 }") and str_contains(text, "@split_head") and str_contains(text, "__vais_str_len")
+    } else if shape == 244 {
+        ok = str_contains(text, "__vais_list_checked_index") and str_contains(text, "icmp slt")
     } else if shape == 2 {
         ok = str_contains(text, " br ")
     } else if shape == 3 {
@@ -9163,5 +9197,7 @@ fn main() -> Int {
     fail = fail + expect_case(vaisc, tmp, "expr_body_argv_pipeline", "direct expression bodies, args() dispatch, and pipeline join run (=42)", 240)
     fail = fail + expect_case(vaisc, tmp, "enumerate_destructuring", "direct for-head enumerate destructuring lowers to indexed range-for (=42)", 241)
     fail = fail + expect_case(vaisc, tmp, "enum_map_pipeline", "direct enumerate-map pipelines lower to indexed accumulation loops (=42)", 242)
+    fail = fail + expect_case(vaisc, tmp, "tuple_mixed_direct", "direct mixed Int/Str tuple returns lower through generated structs (=42)", 243)
+    fail = fail + expect_case(vaisc, tmp, "take_direct", "direct take(k) lowers to clamped index loops (=42)", 244)
     return fail
 }

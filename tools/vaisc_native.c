@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <dirent.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17071,6 +17072,7 @@ static char *lower_nested_list_text(const char *text) {
 typedef struct {
     char *name;
     char *struct_name;
+    char *types; /* one char per element: 'I' = Int, 'S' = Str */
     int arity;
 } TupleFnInfo;
 
@@ -17084,6 +17086,7 @@ static void tuple_info_free(TupleLowerInfo *info) {
     for (int i = 0; i < info->count; i++) {
         free(info->items[i].name);
         free(info->items[i].struct_name);
+        free(info->items[i].types);
     }
     info->count = 0;
     info->temp_count = 0;
@@ -17124,6 +17127,7 @@ static int parse_tuple_fn_signature(
     char **name_out,
     char **struct_name_out,
     char **rewritten_out,
+    char **types_out,
     int *arity_out
 ) {
     const char *s = skip_ws(line);
@@ -17154,12 +17158,18 @@ static int parse_tuple_fn_signature(
         free_split_parts(types, arity, 8);
         return 0;
     }
+    char type_tags[9];
     for (int i = 0; i < arity; i++) {
-        if (strcmp(types[i], "Int") != 0) {
+        if (strcmp(types[i], "Int") == 0) {
+            type_tags[i] = 'I';
+        } else if (strcmp(types[i], "Str") == 0) {
+            type_tags[i] = 'S';
+        } else {
             free_split_parts(types, arity, 8);
             return 0;
         }
     }
+    type_tags[arity] = '\0';
     free_split_parts(types, arity, 8);
 
     char *name = substr_copy(name_start, (size_t)(name_end - name_start));
@@ -17178,11 +17188,12 @@ static int parse_tuple_fn_signature(
     *name_out = name;
     *struct_name_out = struct_name_text;
     *rewritten_out = sb_take(&rewritten);
+    *types_out = strdup(type_tags);
     *arity_out = arity;
     return 1;
 }
 
-static char *tuple_struct_line(const char *struct_name, int arity) {
+static char *tuple_struct_line(const char *struct_name, const char *types, int arity) {
     StrBuf out;
     sb_init(&out);
     sb_append(&out, "struct ");
@@ -17191,7 +17202,8 @@ static char *tuple_struct_line(const char *struct_name, int arity) {
     for (int i = 0; i < arity; i++) {
         if (i > 0) sb_append(&out, ", ");
         char field[32];
-        snprintf(field, sizeof(field), "item%d: Int", i);
+        snprintf(field, sizeof(field), "item%d: %s", i,
+                 types[i] == 'S' ? "Str" : "Int");
         sb_append(&out, field);
     }
     sb_append(&out, " }");
@@ -17199,40 +17211,50 @@ static char *tuple_struct_line(const char *struct_name, int arity) {
 }
 
 static char *lower_tuple_return_line(const char *line, const char *struct_name, int arity) {
-    const char *s = skip_ws(line);
-    if (!starts_with(s, "return") || is_ident_continue(s[6])) return strdup(line);
-    const char *value = skip_ws(s + 6);
-    if (*value != '(') return strdup(line);
-    int close = find_matching_paren_c(line, (int)(value - line));
-    if (close < 0) return strdup(line);
-    const char *tail = skip_ws(line + close + 1);
-    if (*tail == ';') tail = skip_ws(tail + 1);
-    if (*tail != '\0') return strdup(line);
-
-    char *inside = substr_copy(value + 1, (size_t)(line + close - value - 1));
-    char *parts[8] = {0};
-    int count = split_top_level_commas_c(inside, parts, 8);
-    free(inside);
-    if (count != arity) {
-        free_split_parts(parts, count, 8);
-        return strdup(line);
-    }
-
+    /* Rewrite every `return (a, b, ...)` on the line, including inline-brace
+     * bodies like `if c { return (x, y) }` — the tuple literal must be
+     * followed only by `;`, `}`-closers, or the end of the line. */
     StrBuf out;
     sb_init(&out);
-    sb_append_n(&out, line, (size_t)(s - line));
-    sb_append(&out, "return ");
-    sb_append(&out, struct_name);
-    sb_append(&out, " { ");
-    for (int i = 0; i < arity; i++) {
-        if (i > 0) sb_append(&out, ", ");
-        char field[32];
-        snprintf(field, sizeof(field), "item%d: ", i);
-        sb_append(&out, field);
-        sb_append(&out, parts[i]);
+    const char *p = line;
+    while (*p != '\0') {
+        if (starts_with(p, "return") && !is_ident_continue(p[6]) &&
+            (p == line || !is_ident_continue(p[-1]))) {
+            const char *value = skip_ws(p + 6);
+            if (*value == '(') {
+                int close = find_matching_paren_c(line, (int)(value - line));
+                if (close >= 0) {
+                    const char *tail = skip_ws(line + close + 1);
+                    if (*tail == ';') tail = skip_ws(tail + 1);
+                    if (*tail == '\0' || *tail == '}') {
+                        char *inside = substr_copy(value + 1, (size_t)(line + close - value - 1));
+                        char *parts[8] = {0};
+                        int count = split_top_level_commas_c(inside, parts, 8);
+                        free(inside);
+                        if (count == arity) {
+                            sb_append(&out, "return ");
+                            sb_append(&out, struct_name);
+                            sb_append(&out, " { ");
+                            for (int i = 0; i < arity; i++) {
+                                if (i > 0) sb_append(&out, ", ");
+                                char field[32];
+                                snprintf(field, sizeof(field), "item%d: ", i);
+                                sb_append(&out, field);
+                                sb_append(&out, parts[i]);
+                            }
+                            sb_append(&out, " }");
+                            free_split_parts(parts, count, 8);
+                            p = line + close + 1;
+                            continue;
+                        }
+                        free_split_parts(parts, count, 8);
+                    }
+                }
+            }
+        }
+        sb_append_n(&out, p, 1);
+        p++;
     }
-    sb_append(&out, " }");
-    free_split_parts(parts, count, 8);
     return sb_take(&out);
 }
 
@@ -17325,14 +17347,16 @@ static char *lower_tuple_text(const char *text) {
         char *name = NULL;
         char *struct_name = NULL;
         char *rewritten = NULL;
+        char *types = NULL;
         int arity = 0;
 
-        if (parse_tuple_fn_signature(line, &name, &struct_name, &rewritten, &arity)) {
+        if (parse_tuple_fn_signature(line, &name, &struct_name, &rewritten, &types, &arity)) {
             if (info.count < 16) {
                 info.items[info.count].name = name;
                 info.items[info.count].struct_name = struct_name;
+                info.items[info.count].types = types;
                 info.items[info.count].arity = arity;
-                char *struct_line = tuple_struct_line(struct_name, arity);
+                char *struct_line = tuple_struct_line(struct_name, types, arity);
                 lines_push(&out, struct_line);
                 lines_push(&out, rewritten);
                 active_struct = info.items[info.count].struct_name;
@@ -17344,6 +17368,7 @@ static char *lower_tuple_text(const char *text) {
             free(name);
             free(struct_name);
             free(rewritten);
+            free(types);
         }
 
         if (active_struct != NULL && active_depth > 0) {
@@ -18525,6 +18550,251 @@ static char *lower_enumerate_text(const char *text) {
         sb_append(&out, "\n");
         line = end + 1;
     }
+    return sb_take(&out);
+}
+
+static void sb_appendf(StrBuf *sb, const char *fmt, ...) {
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    sb_append(sb, buf);
+}
+
+/* Stage 3c take desugar: `xs.take(k)` yields the first k elements of a list,
+ * clamped to its length, in two spellings. `for x in xs.take(k) {` lowers to
+ * a clamped index loop binding x by direct indexing, and
+ * `let [mut] ys = xs.take(k)` lowers to a typed empty list plus a clamped
+ * push loop — the element type comes from the receiver's `List<T>`
+ * annotation (a let or fn parameter earlier in the same function). The
+ * receiver must be a plain identifier; every other `.take(` position stays
+ * unlowered for the loud front check. */
+#define TAKE_SYMS_CAP 128
+typedef struct {
+    char *names[TAKE_SYMS_CAP];
+    char *elems[TAKE_SYMS_CAP];
+    int count;
+} TakeSymTab;
+
+static void take_syms_reset(TakeSymTab *tab) {
+    for (int i = 0; i < tab->count; i++) {
+        free(tab->names[i]);
+        free(tab->elems[i]);
+    }
+    tab->count = 0;
+}
+
+static void take_syms_add(TakeSymTab *tab, const char *name, size_t name_len,
+                          const char *elem, size_t elem_len) {
+    if (tab->count >= TAKE_SYMS_CAP) return;
+    tab->names[tab->count] = substr_copy(name, name_len);
+    tab->elems[tab->count] = substr_copy(elem, elem_len);
+    if (tab->names[tab->count] == NULL || tab->elems[tab->count] == NULL) {
+        free(tab->names[tab->count]);
+        free(tab->elems[tab->count]);
+        return;
+    }
+    tab->count++;
+}
+
+static const char *take_syms_elem(TakeSymTab *tab, const char *name, size_t name_len) {
+    for (int i = 0; i < tab->count; i++) {
+        if (strlen(tab->names[i]) == name_len &&
+            strncmp(tab->names[i], name, name_len) == 0) {
+            return tab->elems[i];
+        }
+    }
+    return NULL;
+}
+
+/* Register every `name: List<T>` pair on the line (covers fn params and
+ * annotated lets alike; scanning is textual, so a `List<` inside a string
+ * would misregister — acceptable for a type-annotation-only spelling). */
+static void take_syms_scan_line(TakeSymTab *tab, const char *line) {
+    for (const char *p = line; (p = strstr(p, "List<")) != NULL; p++) {
+        const char *colon = p;
+        while (colon > line && isspace((unsigned char)colon[-1])) colon--;
+        if (colon == line || colon[-1] != ':') continue;
+        const char *name_end = colon - 1;
+        while (name_end > line && isspace((unsigned char)name_end[-1])) name_end--;
+        const char *name_start = name_end;
+        while (name_start > line && is_ident_continue(name_start[-1])) name_start--;
+        if (name_start == name_end || !is_ident_start(*name_start)) continue;
+        const char *elem_start = p + 5;
+        int depth = 1;
+        const char *e = elem_start;
+        while (*e != '\0' && depth > 0) {
+            if (*e == '<') depth++;
+            else if (*e == '>') depth--;
+            if (depth == 0) break;
+            e++;
+        }
+        if (depth != 0) continue;
+        take_syms_add(tab, name_start, (size_t)(name_end - name_start),
+                      elem_start, (size_t)(e - elem_start));
+    }
+}
+
+/* Parse `RECV.take(K)` at `head` (whole remaining text of the expression);
+ * returns 1 and fills the pieces when it matches a plain-ident receiver. */
+static int take_parse_call(const char *head, char **recv_out, char **k_out) {
+    const char *p = skip_ws(head);
+    if (!is_ident_start(*p)) return 0;
+    const char *recv_start = p;
+    while (is_ident_continue(*p)) p++;
+    size_t recv_len = (size_t)(p - recv_start);
+    if (!starts_with(p, ".take")) return 0;
+    const char *open = p + 5;
+    if (*open != '(') return 0;
+    int depth = 1;
+    const char *k_start = open + 1;
+    const char *e = k_start;
+    while (*e != '\0' && depth > 0) {
+        if (*e == '(') depth++;
+        else if (*e == ')') depth--;
+        if (depth == 0) break;
+        e++;
+    }
+    if (depth != 0) return 0;
+    const char *tail = skip_ws(e + 1);
+    if (*tail == ';') tail = skip_ws(tail + 1);
+    if (*tail != '\0') return 0;
+    *recv_out = substr_copy(recv_start, recv_len);
+    *k_out = substr_copy(k_start, (size_t)(e - k_start));
+    return 1;
+}
+
+static char *lower_take_line(const char *line, TakeSymTab *tab, int *counter) {
+    const char *p = skip_ws(line);
+    size_t indent_len = (size_t)(p - line);
+    if (starts_with(p, "fn ")) {
+        take_syms_reset(tab);
+        take_syms_scan_line(tab, line);
+        return NULL;
+    }
+    if (strstr(p, ".take(") == NULL) {
+        take_syms_scan_line(tab, line);
+        return NULL;
+    }
+    /* for x in RECV.take(K) { */
+    if (starts_with(p, "for ")) {
+        const char *q = skip_ws(p + 4);
+        if (!is_ident_start(*q)) return NULL;
+        const char *x_start = q;
+        while (is_ident_continue(*q)) q++;
+        size_t x_len = (size_t)(q - x_start);
+        q = skip_ws(q);
+        if (!starts_with(q, "in ")) return NULL;
+        char *head = trim_copy(skip_ws(q + 3));
+        size_t hn = strlen(head);
+        if (hn == 0 || head[hn - 1] != '{') {
+            free(head);
+            return NULL;
+        }
+        head[--hn] = '\0';
+        char *recv = NULL;
+        char *k_expr = NULL;
+        int ok = take_parse_call(head, &recv, &k_expr);
+        free(head);
+        if (!ok) return NULL;
+        *counter += 1;
+        int id = *counter;
+        StrBuf out;
+        sb_init(&out);
+        sb_append_n(&out, line, indent_len);
+        sb_appendf(&out, "let mut vais_take_%d = %s\n", id, k_expr);
+        sb_append_n(&out, line, indent_len);
+        sb_appendf(&out, "let vais_tlen_%d = %s.len()\n", id, recv);
+        sb_append_n(&out, line, indent_len);
+        sb_appendf(&out, "if vais_tlen_%d < vais_take_%d { vais_take_%d = vais_tlen_%d }\n", id, id, id, id);
+        sb_append_n(&out, line, indent_len);
+        sb_appendf(&out, "for vais_ti_%d in 0..vais_take_%d {\n", id, id);
+        sb_append_n(&out, line, indent_len);
+        sb_append(&out, "    let ");
+        sb_append_n(&out, x_start, x_len);
+        sb_appendf(&out, " = %s[vais_ti_%d]", recv, id);
+        free(recv);
+        free(k_expr);
+        return sb_take(&out);
+    }
+    /* let [mut] ys = RECV.take(K) */
+    if (starts_with(p, "let ")) {
+        const char *q = skip_ws(p + 4);
+        int is_mut = 0;
+        if (starts_with(q, "mut ") && !is_ident_continue(q[3])) {
+            is_mut = 1;
+            q = skip_ws(q + 4);
+        }
+        if (!is_ident_start(*q)) return NULL;
+        const char *name_start = q;
+        while (is_ident_continue(*q)) q++;
+        size_t name_len = (size_t)(q - name_start);
+        q = skip_ws(q);
+        if (*q != '=' || q[1] == '=') return NULL;
+        char *recv = NULL;
+        char *k_expr = NULL;
+        if (!take_parse_call(q + 1, &recv, &k_expr)) return NULL;
+        const char *elem = take_syms_elem(tab, recv, strlen(recv));
+        if (elem == NULL) {
+            free(recv);
+            free(k_expr);
+            return NULL;
+        }
+        *counter += 1;
+        int id = *counter;
+        StrBuf out;
+        sb_init(&out);
+        sb_append_n(&out, line, indent_len);
+        sb_appendf(&out, "let mut vais_take_%d = %s\n", id, k_expr);
+        sb_append_n(&out, line, indent_len);
+        sb_appendf(&out, "let vais_tlen_%d = %s.len()\n", id, recv);
+        sb_append_n(&out, line, indent_len);
+        sb_appendf(&out, "if vais_tlen_%d < vais_take_%d { vais_take_%d = vais_tlen_%d }\n", id, id, id, id);
+        sb_append_n(&out, line, indent_len);
+        sb_append(&out, "let ");
+        if (is_mut) sb_append(&out, "mut ");
+        sb_append_n(&out, name_start, name_len);
+        sb_appendf(&out, ": List<%s> = []\n", elem);
+        sb_append_n(&out, line, indent_len);
+        sb_appendf(&out, "for vais_ti_%d in 0..vais_take_%d {\n", id, id);
+        sb_append_n(&out, line, indent_len);
+        sb_append(&out, "    ");
+        sb_append_n(&out, name_start, name_len);
+        sb_appendf(&out, ".push(%s[vais_ti_%d])\n", recv, id);
+        sb_append_n(&out, line, indent_len);
+        sb_append(&out, "}");
+        free(recv);
+        free(k_expr);
+        return sb_take(&out);
+    }
+    return NULL;
+}
+
+static char *lower_take_text(const char *text) {
+    StrBuf out;
+    sb_init(&out);
+    int counter = 0;
+    TakeSymTab tab;
+    memset(&tab, 0, sizeof(tab));
+    const char *line = text;
+    for (;;) {
+        const char *end = strchr(line, '\n');
+        size_t len = end == NULL ? strlen(line) : (size_t)(end - line);
+        char *one = substr_copy(line, len);
+        char *rewritten = lower_take_line(one, &tab, &counter);
+        if (rewritten != NULL) {
+            sb_append(&out, rewritten);
+            free(rewritten);
+        } else {
+            sb_append(&out, one);
+        }
+        free(one);
+        if (end == NULL) break;
+        sb_append(&out, "\n");
+        line = end + 1;
+    }
+    take_syms_reset(&tab);
     return sb_take(&out);
 }
 
@@ -20213,8 +20483,10 @@ static char *prepare_source_text(const char *raw) {
     free(normalized_presplit);
     char *enum_for_lowered = lower_enumerate_text(fstring_lowered);
     free(fstring_lowered);
-    char *str_method_lowered = lower_str_method_text(enum_for_lowered);
+    char *take_lowered = lower_take_text(enum_for_lowered);
     free(enum_for_lowered);
+    char *str_method_lowered = lower_str_method_text(take_lowered);
+    free(take_lowered);
     char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
     char *argv_lowered = lower_argv_text(collect_lowered);
@@ -21958,6 +22230,65 @@ static int check_option_result_generic_surface_text(const char *text, const char
     return issues == 0 ? 0 : 1;
 }
 
+/* Valid tuple spellings are consumed by lower_tuple_text; a surviving
+ * top-level-comma `return (a, b)` or `let (a, b) =` means an unsupported
+ * position (a non-tuple fn, an unregistered callee, or elem types beyond
+ * Int/Str) and previously reached the emitters silently. */
+static int front_probe_top_level_comma(const char *probe, int open_idx) {
+    int depth = 0;
+    for (const char *p = probe + open_idx; *p != '\0'; p++) {
+        if (*p == '(' || *p == '[') depth++;
+        else if (*p == ')' || *p == ']') {
+            depth--;
+            if (depth == 0) return 0;
+        } else if (*p == ',' && depth == 1) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int front_check_tuple_line(const char *path, int line_no, const char *line, const char *probe) {
+    const char *t = skip_ws(probe);
+    if (starts_with(t, "let ")) {
+        const char *q = skip_ws(t + 4);
+        if (*q == '(' && front_probe_top_level_comma(probe, (int)(q - probe))) {
+            report_issue(path, line_no, (int)(q - probe) + 1, line,
+                "tuple destructuring needs a call to a `-> (T1, T2)` function",
+                "write `let (a, b) = f(...)` where `f` is declared in this file with a tuple return of Int/Str elements; other right-hand sides are not lowered yet.",
+                NULL);
+            return 1;
+        }
+    }
+    const char *r = strstr(probe, "return");
+    while (r != NULL) {
+        if ((r == probe || !is_ident_continue(r[-1])) && !is_ident_continue(r[6])) {
+            const char *v = skip_ws(r + 6);
+            if (*v == '(' && front_probe_top_level_comma(probe, (int)(v - probe))) {
+                report_issue(path, line_no, (int)(v - probe) + 1, line,
+                    "tuple returns need a `-> (T1, T2)` function header",
+                    "declare the function as `fn name(...) -> (T1, T2)` with Int/Str elements on one line; other tuple positions are not lowered yet.",
+                    NULL);
+                return 1;
+            }
+        }
+        r = strstr(r + 1, "return");
+    }
+    return 0;
+}
+
+/* Valid take spellings are consumed by lower_take_text; anything surviving
+ * to the front loop is an unsupported position or an unresolvable receiver. */
+static int front_check_take_line(const char *path, int line_no, const char *line, const char *probe) {
+    const char *hit = strstr(probe, ".take(");
+    if (hit == NULL) return 0;
+    report_issue(path, line_no, (int)(hit - probe) + 2, line,
+        "take(k) needs a let binding or a for-in head over a plain List local",
+        "write `let ys = xs.take(k)` with `xs` annotated `List<T>` earlier in the function, or `for x in xs.take(k) { ... }`; other positions and computed receivers are not lowered yet.",
+        NULL);
+    return 1;
+}
+
 /* Unknown methods on tracked Map locals/params previously fell through every
  * emitter case and the condition silently became constant 0 (the concrete
  * footgun was `contains_key`, which is not a Vais Map method). */
@@ -22354,6 +22685,8 @@ static int check_front_contract_text(const char *text, const char *path) {
         issues += front_check_enumerate_line(path, line_no, line);
         issues += front_check_enum_map_line(path, line_no, line);
         issues += front_check_map_method_line(path, line_no, line, probe, map_locals, map_local_count);
+        issues += front_check_take_line(path, line_no, line, probe);
+        issues += front_check_tuple_line(path, line_no, line, probe);
         {
             const char *eq = strstr(probe, "= if ");
             if (eq != NULL) {
@@ -23923,8 +24256,10 @@ static char *prepare_source_file(const char *path) {
     free(normalized_presplit);
     char *enum_for_lowered = lower_enumerate_text(fstring_lowered);
     free(fstring_lowered);
-    char *str_method_lowered = lower_str_method_text(enum_for_lowered);
+    char *take_lowered = lower_take_text(enum_for_lowered);
     free(enum_for_lowered);
+    char *str_method_lowered = lower_str_method_text(take_lowered);
+    free(take_lowered);
     char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
     char *argv_lowered = lower_argv_text(collect_lowered);
@@ -36453,8 +36788,11 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     if (fstring_lowered == NULL) return 1;
     char *enum_for_lowered = lower_enumerate_text(fstring_lowered);
     free(fstring_lowered);
-    char *str_method_lowered = lower_str_method_text(enum_for_lowered);
+    char *take_lowered = lower_take_text(enum_for_lowered);
     free(enum_for_lowered);
+    if (take_lowered == NULL) return 1;
+    char *str_method_lowered = lower_str_method_text(take_lowered);
+    free(take_lowered);
     if (str_method_lowered == NULL) return 1;
     char *collect_lowered = lower_collect_method_text(str_method_lowered);
     free(str_method_lowered);
@@ -36495,8 +36833,11 @@ static int direct_emit_ir_file(const char *source, const char *out_path, const c
     char *nested_lowered = lower_nested_list_text(enum_lowered);
     free(enum_lowered);
     if (nested_lowered == NULL) return 1;
-    char *prepared = lower_list_method_text(nested_lowered);
+    char *list_method_lowered_d = lower_list_method_text(nested_lowered);
     free(nested_lowered);
+    if (list_method_lowered_d == NULL) return 1;
+    char *prepared = lower_tuple_text(list_method_lowered_d);
+    free(list_method_lowered_d);
     if (prepared == NULL) return 1;
     /* Debug aid: dump the fully lowered source the direct emitter consumes. */
     if (getenv("VAISC_DUMP_PREPARED") != NULL) {

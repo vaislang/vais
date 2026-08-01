@@ -50,9 +50,13 @@ lower to indexed accumulation loops, locked by
 examples/e383_enum_map_pipeline.vais and direct feature shape 242; the
 execution-verified e332 rewrite with the one-line pipeline renderer
 measures 897 tokens (below TypeScript's 914). EVERY idiom from the
-original Stage 2 design sketch is now verified surface; general tuple
-types and `.take(k)` remain the only deliberately deferred candidates.
-Next: adopt the idioms in new product code and re-measure the corpus. Goal: cut LLM development token cost by half against
+original Stage 2 design sketch is now verified surface. Stage 3c
+(2026-08-01) cleared the deferred list: tuple returns accept mixed
+Int/Str elements with inline-brace `return (a, b)` bodies and run on
+both engines (e388, direct shape 243), and `xs.take(k)` lands as clamped
+index for-in heads plus typed fresh-list let bindings (e389, shape 244).
+No deliberately deferred candidates remain; the surface is
+demand-driven from here. Goal: cut LLM development token cost by half against
 performance-equivalent mainstream languages while keeping runtime behavior and
 performance unchanged.
 

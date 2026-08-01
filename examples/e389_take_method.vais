@@ -1,0 +1,34 @@
+# expect: 42
+# `xs.take(k)`: the first k elements of a list, clamped to its length, in
+# the two promoted spellings. `for x in xs.take(k) { ... }` lowers to a
+# clamped index loop (no list copy), and `let [mut] ys = xs.take(k)`
+# builds a fresh typed list from the receiver's `List<T>` annotation —
+# the source list is never mutated, k = 0 yields nothing, and k past the
+# end takes everything.
+fn head_sum(xs: List<Int>, k: Int) -> Int {
+    let mut sum = 0
+    for x in xs.take(k) {
+        sum += x
+    }
+    sum
+}
+
+fn main() -> Int {
+    let xs: List<Int> = [10, 20, 5, 99, 99]
+    if head_sum(xs, 3) != 35 { return 1 }
+    if head_sum(xs, 0) != 0 { return 2 }
+    if head_sum(xs, 50) != 233 { return 3 }
+
+    let names: List<Str> = ["a", "bb", "ccc", "dddd"]
+    let top = names.take(2)
+    if top.len() != 2 { return 4 }
+    if top[1] != "bb" { return 5 }
+
+    let mut wide = names.take(9)
+    wide.push("e")
+    if wide.len() != 5 { return 6 }
+    if names.len() != 4 { return 7 }
+
+    # 30 + 2 * 6 = 42
+    head_sum(xs, 2) + top.len() * 6
+}

@@ -8116,6 +8116,8 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "enum_map") == 1 { return write_enum_map_accept(path) }
     if str_eq(name, "list_copy") == 1 { return write_list_copy_accept(path) }
     if str_eq(name, "rebind") == 1 { return write_rebind_accept(path) }
+    if str_eq(name, "tuple_mixed") == 1 { return write_tuple_mixed_accept(path) }
+    if str_eq(name, "take") == 1 { return write_take_accept(path) }
     if str_eq(name, "day1") == 1 { return write_day1(path) }
     if str_eq(name, "for") == 1 { return write_for_accept(path) }
     if str_eq(name, "io") == 1 { return write_io_accept(path) }
@@ -9167,6 +9169,66 @@ fn write_dangling_else_bad(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_tuple_mixed_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn split_head(s: Str) -> (Str, Int) {")
+    append_line(out, "    return (s, s.len())")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn label_pair(n: Int) -> (Int, Str) {")
+    append_line(out, "    if n > 0 { return (n, \"plus\") }")
+    append_line(out, "    return (0 - n, \"minus\")")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let (head, n) = split_head(\"vais\")")
+    append_line(out, "    if head != \"vais\" { return 1 }")
+    append_line(out, "    let (mag, sign) = label_pair(0 - 34)")
+    append_line(out, "    if sign != \"minus\" { return 2 }")
+    append_line(out, "    return mag + n + 4")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_take_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn head_sum(xs: List<Int>, k: Int) -> Int {")
+    append_line(out, "    let mut sum = 0")
+    append_line(out, "    for x in xs.take(k) {")
+    append_line(out, "        sum += x")
+    append_line(out, "    }")
+    append_line(out, "    sum")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Int> = [30, 5, 99]")
+    append_line(out, "    let front: List<Int> = xs")
+    append_line(out, "    let two = front.take(2)")
+    append_line(out, "    if two.len() != 2 { return 1 }")
+    append_line(out, "    return head_sum(xs, 2) + two.len() + 5")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_take_position_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let xs: List<Int> = [1, 2, 3]")
+    append_line(out, "    let n = xs.take(2).len()")
+    append_line(out, "    return n")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_tuple_literal_bad(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let (a, b) = (1, 2)")
+    append_line(out, "    return a + b")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_map_unknown_method_bad(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -9417,6 +9479,8 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "rebind_struct") == 1 { return write_rebind_struct_bad(path) }
     if str_eq(name, "rebind_literal") == 1 { return write_rebind_literal_bad(path) }
     if str_eq(name, "map_unknown_method") == 1 { return write_map_unknown_method_bad(path) }
+    if str_eq(name, "take_position") == 1 { return write_take_position_bad(path) }
+    if str_eq(name, "tuple_literal") == 1 { return write_tuple_literal_bad(path) }
     if str_eq(name, "fstring_empty_hole") == 1 { return write_fstring_empty_hole_bad(path) }
     if str_eq(name, "fstring_lone_brace") == 1 { return write_fstring_lone_brace_bad(path) }
     if str_eq(name, "fstring_open_hole") == 1 { return write_fstring_open_hole_bad(path) }
@@ -9984,6 +10048,10 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "rebind_struct", "rebound with a different type", "", "distinct name")
     fail = fail + expect_reject(vaisc, tmp, "rebind_literal", "rebound with a different type", "", "distinct name")
     fail = fail + expect_reject(vaisc, tmp, "map_unknown_method", "not a verified Map method", "", "use `contains(key)`")
+    fail = fail + expect_accept(vaisc, tmp, "tuple_mixed", "accepts mixed Int/Str tuple returns and destructuring (=42)", 42)
+    fail = fail + expect_accept(vaisc, tmp, "take", "accepts take(k) in let bindings and for-in heads (=42)", 42)
+    fail = fail + expect_reject(vaisc, tmp, "take_position", "take(k) needs a let binding or a for-in head", "", "other positions")
+    fail = fail + expect_reject(vaisc, tmp, "tuple_literal", "tuple destructuring needs a call", "", "tuple return")
     fail = fail + expect_reject(vaisc, tmp, "unsupported_method", "method calls beyond push/clear/len/is_empty/last/pop/sum", "", "plain function call")
     fail = fail + expect_accept(vaisc, tmp, "map", label_map_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_option", label_map_option_accept(), 42)

@@ -378,6 +378,11 @@ arithmetic positions,
 `examples/e387_short_circuit_logic.vais` for `and`/`or` short-circuit
 evaluation on both engines (guarded list indexes, skipped right-side
 side effects, 0/1 normalization in statement and value positions),
+`examples/e388_tuple_pair_mixed.vais` for mixed Int/Str tuple returns
+(`-> (T1, T2)` headers, positional `return (a, b)` including inline-brace
+bodies, and `let (x, y) = f(...)` destructuring),
+`examples/e389_take_method.vais` for `xs.take(k)` first-k slices (clamped
+index for-in heads and typed fresh-list let bindings),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

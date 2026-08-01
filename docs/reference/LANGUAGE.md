@@ -204,7 +204,7 @@ Verified release surface:
 | `Result<Str,Str>` | First non-Int error payload slice: `Ok(Str)`/`Err(Str)` so failures carry human-readable messages, helper returns, local-binding `?` propagation, and inline match recovery of either the `Str` value or the `Str` error message to a `Str` or its `Int` length. Verified in the native direct engine and the full self-host compiler; used by the VaisDB ingest workflow in `examples/e330_vaisdb_ingest_error_message_flow.vais` |
 | `Result<Metric,Int>` | First structured payload slice: `Ok(Metric)`/`Err(Int)`, helper returns, helper parameters/forwarding, and inline match recovery of `Metric` fields to `Int` |
 | `Result<DeclaredStruct,Int>` | Verified for declared struct payloads such as Int-field `Record`, multiline `Entry`, Str-field `DocSummary`, and VaisDB `DocArtifact`: helper returns, helper parameters/forwarding, direct call-argument use of Result-returning helpers, explicit wrapper payload local copies, local-binding `?`, `List<Struct>` output storage, persisted store reload parsing, inline match recovery of multiple struct fields or string field lengths to `Int`, direct `Str` field recovery to string locals, nested `str_concat(...)` composition of `Str` fields, `str_replace`/`str_trim`/`str_upper`/`str_lower` normalization in match arms, transformed string `.len()` scoring in `Int` arms, `Ok` payload handoff to reusable `Int` scoring helpers, helper-call terms composed with normal payload fields, and Bool returns from payload helper terms plus `Err(Int)` comparisons |
-| `(Int, Int)` tuple | Function return and local destructuring slice lowered through generated structs |
+| `(T1, T2)` tuple of Int/Str | Function return and local destructuring slice lowered through generated structs |
 | Simple `struct` | Literal construction including multiline local initialization, same-type local assignment, call arguments, `Str` fields, and direct helper returns for nested literals, field access including `Str` field equality/helper/`.len()` use and struct-returning helper field-chain reads, local field write, single-field nested struct read/write including direct flattening for previously declared single-Int-field nested structs, scalar multi-field nested struct local literals/direct returns/field-chain reads, helper parameters, helper returns, helper-return assignment, generic marker syntax used with `Int` values, generic identity helpers applied to struct literals, simple `impl` method return chains, and simple `trait` plus `impl Trait for Struct` method calls |
 | Small `enum` | Payload-free enum/match, payload enum wildcard match, small recursive `Int` payload enum/match, single-field struct payload enum/match, and single `Option<Int>` payload enum with a nested Option match arm |
 
@@ -2272,24 +2272,52 @@ release-surface verified until their gates are added.
 
 ## Tuples
 
-The verified tuple slice covers function return and immediate local
-destructuring for `Int` tuples:
+The verified tuple slice covers function returns and immediate local
+destructuring for tuples of `Int` and `Str` elements in any mix:
 
 ```vais
-fn pair() -> (Int, Int) {
-    return (3, 4)
+fn split_head(s: Str) -> (Str, Int) {
+    return (s, s.len())
+}
+
+fn label_pair(n: Int) -> (Int, Str) {
+    if n > 0 { return (n, "plus") }
+    return (0 - n, "minus")
 }
 
 fn main() -> Int {
-    let (a, b) = pair()
-    return a + b
+    let (head, n) = split_head("vais")
+    let (mag, sign) = label_pair(0 - 7)
+    return n + mag
 }
 ```
 
-This slice is covered by `examples/e59_tuple.vais`. The public driver lowers it
-to generated struct storage before the self-host core receives the source.
-Nested tuples, tuple parameters, tuple mutation, and non-`Int` tuple fields are
-not release-surface claims yet.
+This slice is covered by `examples/e59_tuple.vais` (Int-only) and
+`examples/e388_tuple_pair_mixed.vais` (mixed elements, inline-brace
+returns). The public driver lowers it to generated struct storage on both
+engines before the emitters receive the source: the header rewrites to a
+struct return, every `return (a, b)` on a line — including inside
+inline-brace bodies like `if c { return (x, y) }` — builds the struct
+positionally, and `let (x, y) = f(...)` destructures through a hidden
+temp. Element types beyond `Int`/`Str`, nested tuples, tuple parameters,
+tuple mutation, and tuple literals outside those two spellings are loud
+front errors, not silent lowerings.
+
+## take
+
+`xs.take(k)` yields the first `k` elements of a list, clamped to its
+length (`k <= 0` yields nothing, `k` past the end takes everything), in
+two spellings:
+
+```vais
+for x in xs.take(k) { ... }        # clamped index loop, no list copy
+let top = names.take(2)            # fresh typed list; source unchanged
+```
+
+The receiver must be a plain `List<T>` local or parameter; the let form
+resolves `T` from the receiver's annotation earlier in the same function.
+Covered by `examples/e389_take_method.vais`; every other `.take(`
+position is a loud front error.
 
 ## Closures
 

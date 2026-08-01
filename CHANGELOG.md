@@ -4,6 +4,27 @@
 
 ### Changed
 
+- Promoted the two remaining deferred Token-Density candidates,
+  clearing the deferred list. Mixed-type tuples: `fn f(...) -> (T1, T2)`
+  now accepts any mix of Int and Str elements (previously Int-only) —
+  the generated tuple struct carries per-element field types, and
+  `return (a, b)` rewrites everywhere on a line including inline-brace
+  bodies (`if c { return (x, y) }`), which the old line-anchored
+  rewriter missed. The tuple pass now also runs on the direct engine
+  (it was full-path-only; `examples/e59_tuple.vais` runs on direct for
+  the first time), and surviving tuple spellings — literals, non-tuple
+  callees, unsupported element types — are loud front errors instead of
+  reaching the emitters (the full engine previously segfaulted on
+  them). `.take(k)`: first-k list slices land in two spellings —
+  `for x in xs.take(k) { ... }` lowers to a clamped index loop with no
+  list copy, and `let [mut] ys = xs.take(k)` builds a fresh typed list
+  from the receiver's `List<T>` annotation, never mutating the source;
+  k <= 0 yields nothing and k past the end takes everything. Locked by
+  `examples/e388_tuple_pair_mixed.vais` and
+  `examples/e389_take_method.vais` in the parity manifest, front
+  accept/reject fixtures for both features, direct feature shapes
+  243-244, and new LANGUAGE.md sections.
+
 - Migrated the vaisdb posting-index internals (`vaisdb/index.vais`) to
   the Token-Density surface in a second, deeper pass now that `and`/`or`
   short-circuit: guarded single-line conditions
