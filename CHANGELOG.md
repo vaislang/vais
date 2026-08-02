@@ -4,6 +4,19 @@
 
 ### Changed
 
+- vaisdb search snippets now highlight the matching terms: every
+  query-term occurrence in the snippet line is wrapped with `[` `]`
+  markers (`    [cache] hit line here`) in one left-to-right pass —
+  the first matching term in query order wins at each position, matches
+  never overlap, and the substring semantics mirror snippet selection
+  itself, so a term also marks inside a longer word (`[cache]s`,
+  `pl[ai]n`). Highlighting runs on the already-trimmed 80-byte display
+  slice, so a term cut by the trim simply stays unmarked. The
+  highlight_terms primitive lives in vaisdb/index.vais; locked by
+  package self-test cases 74-78 (multi-term, multi-occurrence,
+  inside-word, no-match) and two workflow gate cases (single-term and
+  every-query-term highlighting), replacing the plain-snippet grep.
+
 - Added `vaisdb phrase <index> <phrase-text> [k]`, exact word-sequence
   search over stored sources: every document's on-disk source text is
   whitespace-normalized (runs of spaces/tabs/newlines collapse, so a

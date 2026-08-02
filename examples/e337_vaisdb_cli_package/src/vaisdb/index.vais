@@ -539,6 +539,39 @@ fn utf8_trim(line: Str, limit: Int) -> Str {
     str_slice(line, 0, end)
 }
 
+# Wrap every query-term occurrence in a display line with `[` `]` markers:
+# one left-to-right pass, the first matching term in query order wins at
+# each position, matches never overlap, and the substring semantics mirror
+# snippet selection (so a term highlights inside a longer word too). Runs
+# on the already-trimmed display slice; a term cut by the trim simply
+# stays unmarked.
+fn highlight_terms(line: Str, query: Map<Str,Int>) -> Str {
+    let qn = query.len()
+    let n = line.len()
+    let b = str_builder_new()
+    let mut p = 0
+    while p < n {
+        let mut hit_len = 0
+        for qi in 0..qn {
+            let term = query.key_at(qi)
+            let tn = term.len()
+            if hit_len == 0 and tn > 0 and p + tn <= n {
+                if str_slice(line, p, tn) == term { hit_len = tn }
+            }
+        }
+        if hit_len > 0 {
+            let lb = str_builder_push(b, 91)
+            let mid = str_builder_append(b, str_slice(line, p, hit_len))
+            let rb = str_builder_push(b, 93)
+            p += hit_len
+        } else {
+            let ch = str_builder_push(b, line[p])
+            p += 1
+        }
+    }
+    str_builder_finish(b)
+}
+
 # First body line containing any query term, trimmed for display; empty
 # when nothing matches (case-sensitive, substring semantics). Byte scan:
 # the body is a whole document, so no line list here either.

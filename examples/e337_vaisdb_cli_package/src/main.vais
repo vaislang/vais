@@ -177,7 +177,8 @@ fn run_search(index_dir: Str, query_text: Str, k: Int) -> Int {
             if src != "" and src != "-" and src.exists() {
                 let sn = snippet_from_text(src.read(), query)
                 if sn.len() > 0 {
-                    print(f"    {sn}")
+                    let marked = highlight_terms(sn, query)
+                    print(f"    {marked}")
                 }
             }
         }
@@ -705,6 +706,16 @@ fn self_test() -> Int {
     if phrase_hits("alpha\n  beta", "alpha beta") != 1 { return 71 }
     if phrase_hits("a a a", "a a") != 1 { return 72 }
     if phrase_hits(sf1.read(), "beta gamma") != 1 { return 73 }
+
+    # Snippet highlighting wraps every query-term occurrence with [ ]
+    # markers in one left-to-right pass (substring semantics, like the
+    # snippet selection itself).
+    let hq: Map<Str,Int> = {}
+    if doc_terms_guarded_into("cache ai", hq) != 2 { return 74 }
+    if highlight_terms("cache hit ai cache", hq) != "[cache] hit [ai] [cache]" { return 75 }
+    if highlight_terms("caches", hq) != "[cache]s" { return 76 }
+    if highlight_terms("plain line", hq) != "pl[ai]n line" { return 77 }
+    if highlight_terms("plush lump", hq) != "plush lump" { return 78 }
 
     # 4*10 + 3 - 1 = 42
     return s1 * 10 + s2 - 1
