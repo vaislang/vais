@@ -4,6 +4,19 @@
 
 ### Changed
 
+- Added `vaisdb top <index> [k]`, index-wide top terms: per-term posting
+  counts aggregate across every shard with a byte scan (posting volume
+  stays unbounded; only the distinct-term map carries the 4096 window,
+  erroring politely past it) and the k most frequent print as
+  `N. term=count` rows (default k = 10), exit = rows shown. Removed
+  documents never surface because remove_doc rewrites their posting
+  lines away — verified in the CLI smoke. The new term_totals_into
+  primitive lives with the other shard walks in vaisdb/index.vais, and
+  the report loop is again `rows.take(k)` over sort_by_desc'd struct
+  rows. Locked by package self-test cases 66-68 and five workflow gate
+  cases (build, exit-is-shown-count, `1. cache=4` shard aggregation,
+  exact k=2 output, missing-index error).
+
 - Added `vaisdb similar <index> <doc-id> [k]`, more-like-this search:
   the document's stored on-disk source text becomes the query, every
   indexed document is ranked against it, the document itself and zero

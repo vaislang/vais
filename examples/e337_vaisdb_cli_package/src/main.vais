@@ -249,6 +249,47 @@ fn run_msearch(query_text: Str, k: Int, indexes: List<Str>) -> Int {
     merged[0].score
 }
 
+struct TermRow {
+    term: Str,
+    total: Int,
+}
+
+# Index-wide top terms: aggregate posting counts across every shard and
+# print the k most frequent as `N. term=count` rows (default k = 10);
+# the exit code is the number of rows shown.
+fn run_top(index_dir: Str, k: Int) -> Int {
+    if index_exists(index_dir) != 1 {
+        print("error: index not found")
+        return 3
+    }
+    if k < 1 {
+        print("error: top count must be positive")
+        return 1
+    }
+    let totals: Map<Str,Int> = {}
+    let distinct = term_totals_into(index_dir, totals)
+    if distinct == 0 - 2 {
+        print("error: vocabulary too large")
+        return 1
+    }
+    if distinct == 0 {
+        print("error: index has no postings")
+        return 3
+    }
+    let rows: List<TermRow> = []
+    let tn = totals.len()
+    for i in 0..tn {
+        rows.push(TermRow { term: totals.key_at(i), total: totals.value_at(i) })
+    }
+    rows.sort_by_desc(|r| r.total)
+    let mut shown = 0
+    for row in rows.take(k) {
+        shown += 1
+        print(f"{shown}. {row.term}={row.total}")
+    }
+    shown
+}
+
 # More-like-this: rank every indexed document against the stored source
 # text of one document, drop the document itself and zero scores, and
 # print the top k as `N. doc=score` rows; the exit code is the number of
@@ -410,6 +451,7 @@ fn usage() -> Int {
     print("       vaisdb reindex <index> <doc-dir>")
     print("       vaisdb why <index> <query> <doc-id>")
     print("       vaisdb similar <index> <doc-id> [k]")
+    print("       vaisdb top <index> [k]")
     print("       vaisdb rank <index> <query-text> <k>")
     print("       vaisdb search <index> <query-text> [k]")
     print("       vaisdb msearch <query-text> <k> <index> [index...]")
@@ -601,6 +643,12 @@ fn self_test() -> Int {
     if s_ranked[1].doc_id != "s2" { return 64 }
     if s_ranked[1].score != 2 { return 65 }
 
+    # Index-wide term totals aggregate live postings across shards.
+    let t_totals: Map<Str,Int> = {}
+    if term_totals_into(sidx, t_totals) != 4 { return 66 }
+    if t_totals.get("alpha", 0) != 2 { return 67 }
+    if t_totals.get("zeta", 0) != 1 { return 68 }
+
     # 4*10 + 3 - 1 = 42
     return s1 * 10 + s2 - 1
 }
@@ -623,6 +671,11 @@ fn main() -> Int {
     if command == "ingest-dir" {
         if proc_argc() != 3 { return usage() }
         return run_ingest_dir(proc_arg(1), proc_arg(2))
+    }
+    if command == "top" {
+        if proc_argc() == 2 { return run_top(proc_arg(1), 10) }
+        if proc_argc() == 3 { return run_top(proc_arg(1), parse_int(proc_arg(2))) }
+        return usage()
     }
     if command == "similar" {
         if proc_argc() == 3 { return run_similar(proc_arg(1), proc_arg(2), 5) }
