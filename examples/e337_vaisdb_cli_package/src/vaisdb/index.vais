@@ -227,6 +227,62 @@ fn query_scores_into(index_dir: Str, query: Map<Str,Int>, scores: Map<Str,Int>) 
     scores.len()
 }
 
+# Whitespace-run normalization for phrase matching: every run of spaces,
+# tabs, and newlines collapses to a single space, with no leading or
+# trailing space, so a phrase can match across line breaks.
+fn ws_normalize(body: Str) -> Str {
+    let b = str_builder_new()
+    let n = body.len()
+    let mut pending = 0
+    let mut wrote = 0
+    for pos in 0..n {
+        let c = body[pos]
+        if c == 32 or c == 9 or c == 10 or c == 13 {
+            if wrote == 1 { pending = 1 }
+        } else {
+            if pending == 1 {
+                let sp = str_builder_push(b, 32)
+                pending = 0
+            }
+            let ch = str_builder_push(b, c)
+            wrote = 1
+        }
+    }
+    str_builder_finish(b)
+}
+
+# Non-overlapping occurrences of the normalized phrase inside the
+# normalized body, on token boundaries: a match must start at the text
+# start or after a space and end at the text end or before one, so
+# "alpha beta" never matches inside "ralpha betas".
+fn phrase_hits(body: Str, phrase: Str) -> Int {
+    let nb = ws_normalize(body)
+    let np = ws_normalize(phrase)
+    let pn = np.len()
+    if pn == 0 { return 0 }
+    let n = nb.len()
+    let mut hits = 0
+    let mut p = 0
+    while p + pn <= n {
+        let mut boundary = 1
+        if p > 0 and nb[p - 1] != 32 { boundary = 0 }
+        let mut matched = 0
+        if boundary == 1 and nb[p] == np[0] {
+            if str_slice(nb, p, pn) == np {
+                let e = p + pn
+                if e == n or nb[e] == 32 { matched = 1 }
+            }
+        }
+        if matched == 1 {
+            hits += 1
+            p += pn
+        } else {
+            p += 1
+        }
+    }
+    hits
+}
+
 # Aggregate per-term posting totals across every shard into `totals`; -2
 # when the index vocabulary exceeds the 4096 map window, else the number
 # of distinct terms. (Byte scan per shard: posting volume is unbounded,

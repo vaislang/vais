@@ -254,6 +254,54 @@ struct TermRow {
     total: Int,
 }
 
+struct PhraseRow {
+    doc_id: Str,
+    hits: Int,
+}
+
+# Phrase search over stored sources: every doc's on-disk source text is
+# whitespace-normalized and scanned for the phrase on token boundaries
+# (non-overlapping count); docs without an on-disk source are skipped —
+# there is nothing to verify a word order against. Rows print as
+# `N. doc=hits`, highest count first; the exit code is the number shown.
+fn run_phrase(index_dir: Str, phrase_text: Str, k: Int) -> Int {
+    if index_exists(index_dir) != 1 {
+        print("error: index not found")
+        return 3
+    }
+    if k < 1 {
+        print("error: phrase count must be positive")
+        return 1
+    }
+    let probe = ws_normalize(phrase_text)
+    if probe.len() == 0 {
+        print("error: phrase has no terms")
+        return 1
+    }
+    let ids: List<Str> = []
+    docs_list_into(index_dir, ids)
+    let rows: List<PhraseRow> = []
+    for doc_id in ids {
+        let src = doc_src_path(index_dir, doc_id)
+        if src.len() > 0 and src != "-" {
+            let full = abs_src_path(src)
+            if full.exists() {
+                let hits = phrase_hits(full.read(), phrase_text)
+                if hits > 0 {
+                    rows.push(PhraseRow { doc_id: doc_id, hits: hits })
+                }
+            }
+        }
+    }
+    rows.sort_by_desc(|r| r.hits)
+    let mut shown = 0
+    for row in rows.take(k) {
+        shown += 1
+        print(f"{shown}. {row.doc_id}={row.hits}")
+    }
+    shown
+}
+
 # Index-wide top terms: aggregate posting counts across every shard and
 # print the k most frequent as `N. term=count` rows (default k = 10);
 # the exit code is the number of rows shown.
@@ -452,6 +500,7 @@ fn usage() -> Int {
     print("       vaisdb why <index> <query> <doc-id>")
     print("       vaisdb similar <index> <doc-id> [k]")
     print("       vaisdb top <index> [k]")
+    print("       vaisdb phrase <index> <phrase-text> [k]")
     print("       vaisdb rank <index> <query-text> <k>")
     print("       vaisdb search <index> <query-text> [k]")
     print("       vaisdb msearch <query-text> <k> <index> [index...]")
@@ -649,6 +698,14 @@ fn self_test() -> Int {
     if t_totals.get("alpha", 0) != 2 { return 67 }
     if t_totals.get("zeta", 0) != 1 { return 68 }
 
+    # Phrase matching: token boundaries, whitespace normalization across
+    # line breaks, and non-overlapping counts.
+    if phrase_hits("alpha beta gamma", "alpha beta") != 1 { return 69 }
+    if phrase_hits("ralpha betas", "alpha beta") != 0 { return 70 }
+    if phrase_hits("alpha\n  beta", "alpha beta") != 1 { return 71 }
+    if phrase_hits("a a a", "a a") != 1 { return 72 }
+    if phrase_hits(sf1.read(), "beta gamma") != 1 { return 73 }
+
     # 4*10 + 3 - 1 = 42
     return s1 * 10 + s2 - 1
 }
@@ -671,6 +728,11 @@ fn main() -> Int {
     if command == "ingest-dir" {
         if proc_argc() != 3 { return usage() }
         return run_ingest_dir(proc_arg(1), proc_arg(2))
+    }
+    if command == "phrase" {
+        if proc_argc() == 3 { return run_phrase(proc_arg(1), proc_arg(2), 5) }
+        if proc_argc() == 4 { return run_phrase(proc_arg(1), proc_arg(2), parse_int(proc_arg(3))) }
+        return usage()
     }
     if command == "top" {
         if proc_argc() == 2 { return run_top(proc_arg(1), 10) }

@@ -4,6 +4,24 @@
 
 ### Changed
 
+- Added `vaisdb phrase <index> <phrase-text> [k]`, exact word-sequence
+  search over stored sources: every document's on-disk source text is
+  whitespace-normalized (runs of spaces/tabs/newlines collapse, so a
+  phrase matches across line breaks) and scanned for the phrase on token
+  boundaries — "alpha beta" never matches inside "ralpha betas", and
+  "cache big" never matches "big cache" — counting non-overlapping
+  occurrences. Rows print as `N. doc=hits`, highest count first (default
+  k = 5), exit = rows shown; docs without an on-disk source are skipped
+  since there is no text to verify word order against, an empty phrase
+  errors (exit 1), and a missing index follows the family contract
+  (exit 3). The ws_normalize/phrase_hits primitives live in
+  vaisdb/index.vais, and the report loop is `rows.take(k)` over
+  sort_by_desc'd rows. Locked by package self-test cases 69-73
+  (boundaries, cross-newline matching, non-overlap counting, corpus
+  round trip) and five workflow gate cases (build, exit-is-shown-count,
+  exact ranked output spanning a newline, word-order discrimination,
+  empty-phrase error).
+
 - Added `vaisdb top <index> [k]`, index-wide top terms: per-term posting
   counts aggregate across every shard with a byte scan (posting volume
   stays unbounded; only the distinct-term map carries the 4096 window,

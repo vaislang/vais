@@ -552,6 +552,20 @@ expect_exit "vaisdb top leading term aggregates shards" 0 /bin/sh -c "'$vdb_dist
 expect_exit "vaisdb top honors k" 0 /bin/sh -c "out=\$('$vdb_dist/bin/vaisdb' top '$top_idx' 2); [ \"\$out\" = '1. cache=4
 2. alpha=2' ]"
 expect_exit "vaisdb top missing index errors" 3 /bin/sh -c "'$vdb_dist/bin/vaisdb' top '$tmp/vaisdb-top-missing' | grep -qx 'error: index not found' && exit 3"
+
+phrase_docs="$tmp/vaisdb-phrase-docs"
+phrase_idx="$tmp/vaisdb-phrase-idx"
+rm -rf "$phrase_docs" "$phrase_idx"
+mkdir -p "$phrase_docs"
+printf 'big cache win big cache win\n' > "$phrase_docs/p1.txt"
+printf 'big\ncache\n' > "$phrase_docs/p2.txt"
+printf 'cache big\n' > "$phrase_docs/p3.txt"
+expect_exit "vaisdb phrase index builds" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$phrase_idx' '$phrase_docs' | grep -qx 'reindexed added=3 updated=0 removed=0 skipped=0'"
+expect_exit "vaisdb phrase exit is shown count" 2 "$vdb_dist/bin/vaisdb" phrase "$phrase_idx" "big cache"
+expect_exit "vaisdb phrase ranks occurrences and spans newlines" 0 /bin/sh -c "out=\$('$vdb_dist/bin/vaisdb' phrase '$phrase_idx' 'big cache'); [ \"\$out\" = '1. p1=2
+2. p2=1' ]"
+expect_exit "vaisdb phrase word order matters" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' phrase '$phrase_idx' 'win big cache' | grep -qx '1. p1=1'"
+expect_exit "vaisdb phrase empty phrase errors" 1 /bin/sh -c "'$vdb_dist/bin/vaisdb' phrase '$phrase_idx' '   ' | grep -qx 'error: phrase has no terms' && exit 1"
 rm "$reindex_docs/r2.txt"
 expect_exit "vaisdb reindex removes deleted docs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=0 removed=1 skipped=1'"
 expect_exit "vaisdb reindex removed doc leaves search" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$reindex_idx' gamma 2 | cmp -s - /dev/null"
