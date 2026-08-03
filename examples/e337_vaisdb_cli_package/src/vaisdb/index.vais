@@ -84,6 +84,31 @@ fn doc_src_path(index_dir: Str, doc_id: Str) -> Str {
     ""
 }
 
+# Batch registry snapshot: docs.txt loaded once into parallel tables
+# (id, source path or "", stamp or 0) plus a 1-based position map for
+# id lookups (0 = absent). Per-doc loops thread these down instead of
+# re-reading the registry per call — the doc count stays inside the 4095
+# list contract, which also keeps the position map inside the 4096 map
+# window. Line semantics mirror docs_list_into exactly.
+fn registry_load_into(index_dir: Str, ids: List<Str>, srcs: List<Str>, stamps: List<Int>, at: Map<Str,Int>) -> Int {
+    let path = index_docs_path(index_dir)
+    if not path.exists() { return 0 }
+    let tab = "\t"
+    let text = path.read()
+    let mut count = 0
+    for line in text.lines() {
+        let parts = line.split(tab)
+        if parts.len() >= 1 {
+            ids.push(parts[0])
+            if parts.len() >= 2 { srcs.push(parts[1]) } else { srcs.push("") }
+            if parts.len() >= 3 { stamps.push(parse_int(parts[2])) } else { stamps.push(0) }
+            at.insert(parts[0], count + 1)
+            count += 1
+        }
+    }
+    count
+}
+
 fn abs_src_path(p: Str) -> Str {
     if p.len() == 0 { return "-" }
     if p == "-" { return "-" }
@@ -133,7 +158,10 @@ fn doc_terms_guarded_into(body: Str, counts: Map<Str,Int>) -> Int {
     total
 }
 
-fn ingest_doc(index_dir: Str, doc_id: Str, body: Str, src_path: Str) -> Int {
+# Core ingest with the registry-membership decision passed in, so batch
+# callers (reindex) supply it from their snapshot instead of triggering a
+# whole-registry read per document.
+fn ingest_doc_known(index_dir: Str, doc_id: Str, body: Str, src_path: Str, known: Int) -> Int {
     let counts: Map<Str,Int> = {}
     let total = doc_terms_guarded_into(body, counts)
     if total < 0 { return 0 - 2 }
@@ -160,7 +188,7 @@ fn ingest_doc(index_dir: Str, doc_id: Str, body: Str, src_path: Str) -> Int {
             if fs_append_text(index_shard_path(index_dir, s), chunk) != 0 { return 0 - 1 }
         }
     }
-    if doc_known(index_dir, doc_id) != 1 {
+    if known != 1 {
         let src = abs_src_path(src_path)
         let mut stamp = 0
         if src != "-" { stamp = fs_mtime(src) }
@@ -168,6 +196,10 @@ fn ingest_doc(index_dir: Str, doc_id: Str, body: Str, src_path: Str) -> Int {
         if fs_append_text(index_docs_path(index_dir), entry) != 0 { return 0 - 1 }
     }
     total
+}
+
+fn ingest_doc(index_dir: Str, doc_id: Str, body: Str, src_path: Str) -> Int {
+    ingest_doc_known(index_dir, doc_id, body, src_path, doc_known(index_dir, doc_id))
 }
 
 # Stored ingest-time stamp for a doc; 0 for stdin docs, missing docs, and
@@ -474,16 +506,25 @@ fn reindex_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
     let mut skipped = 0
     let mut touched = 0
     let mut failed = 0
+    # One registry snapshot serves the whole walk: the deletion sync
+    # iterates its parallel tables directly, membership and stamps come
+    # from the position map, and each ingest updates the snapshot in
+    # place, so no per-doc whole-registry read remains.
+    let reg_ids: List<Str> = []
+    let reg_srcs: List<Str> = []
+    let reg_stamps: List<Int> = []
+    let reg_pos: Map<Str,Int> = {}
+    let rn = registry_load_into(index_dir, reg_ids, reg_srcs, reg_stamps, reg_pos)
     # Deletion sync: entries whose stored source path vanished are removed
     # before the walk, so deleted files stop surfacing as stale search hits.
     # Docs without an on-disk path (stdin ingests, bare-id/v2 lines) are
     # kept — there is nothing on disk to check them against — and an empty
-    # target dir still errors above before any cleanup runs.
+    # target dir still errors above before any cleanup runs. Removed ids
+    # never reappear in the walk (their files are gone), so the snapshot
+    # stays truthful for every id the walk can visit.
     let mut removed = 0
-    let known: List<Str> = []
-    let kn = docs_list_into(index_dir, known)
-    for doc_id in known {
-        let src_path = doc_src_path(index_dir, doc_id)
+    for (ri, doc_id) in reg_ids.enumerate() {
+        let src_path = reg_srcs[ri]
         if src_path.len() > 0 and src_path != "-" {
             let full = abs_src_path(src_path)
             if not full.exists() {
@@ -496,11 +537,13 @@ fn reindex_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
         if ext > 0 {
             touched += 1
             let src = path_join(dir, name)
-            let cur = fs_mtime(abs_src_path(src))
+            let full_src = abs_src_path(src)
+            let cur = fs_mtime(full_src)
             let walk_id = str_slice(name, 0, name.len() - ext)
+            let wp = reg_pos.get(walk_id, 0)
             let mut mode = 0
-            if doc_known(index_dir, walk_id) == 1 {
-                let stored = doc_mtime(index_dir, walk_id)
+            if wp > 0 {
+                let stored = reg_stamps[wp - 1]
                 if stored > 0 and cur <= stored { mode = 2 }
                 else { mode = 1 }
             }
@@ -512,14 +555,24 @@ fn reindex_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
                     if dropped < 0 { failed = 1 }
                 }
                 let body = src.read()
-                let total = ingest_doc(index_dir, walk_id, body, src)
+                let total = ingest_doc_known(index_dir, walk_id, body, src, 0)
                 if total == 0 - 2 {
                     let w1 = stderr_write(f"skipped (too large): {walk_id}\n")
                 } else if total < 0 {
                     failed = 1
                 } else {
-                    if mode == 1 { updated += 1 }
-                    if mode == 0 { added += 1 }
+                    if mode == 1 {
+                        updated += 1
+                        reg_stamps[wp - 1] = cur
+                        reg_srcs[wp - 1] = full_src
+                    }
+                    if mode == 0 {
+                        added += 1
+                        reg_ids.push(walk_id)
+                        reg_srcs.push(full_src)
+                        reg_stamps.push(cur)
+                        reg_pos.insert(walk_id, reg_ids.len())
+                    }
                 }
             }
         }

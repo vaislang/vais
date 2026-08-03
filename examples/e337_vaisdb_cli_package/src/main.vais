@@ -222,9 +222,18 @@ fn run_msearch(query_text: Str, k: Int, indexes: List<Str>) -> Int {
         let tag = path_basename(index_dir)
         let ranked: List<RankedDoc> = []
         let count = ranked_docs_into(index_dir, query, ranked)
+        # One registry snapshot per index labels every hit without
+        # re-reading docs.txt per document.
+        let reg_ids: List<Str> = []
+        let reg_srcs: List<Str> = []
+        let reg_stamps: List<Int> = []
+        let reg_pos: Map<Str,Int> = {}
+        let rn = registry_load_into(index_dir, reg_ids, reg_srcs, reg_stamps, reg_pos)
         for hit in ranked {
             let doc_id = hit.doc_id
-            let src = doc_src_path(index_dir, doc_id)
+            let hp = reg_pos.get(doc_id, 0)
+            let mut src = ""
+            if hp > 0 { src = reg_srcs[hp - 1] }
             merged.push(MergedHit { label: f"{tag}/{doc_id}", src: src, score: hit.score })
         }
     }
@@ -279,11 +288,16 @@ fn run_phrase(index_dir: Str, phrase_text: Str, k: Int) -> Int {
         print("error: phrase has no terms")
         return 1
     }
-    let ids: List<Str> = []
-    docs_list_into(index_dir, ids)
+    # One registry snapshot supplies every doc's source path; the walk
+    # iterates the parallel tables directly.
+    let reg_ids: List<Str> = []
+    let reg_srcs: List<Str> = []
+    let reg_stamps: List<Int> = []
+    let reg_pos: Map<Str,Int> = {}
+    let rn = registry_load_into(index_dir, reg_ids, reg_srcs, reg_stamps, reg_pos)
     let rows: List<PhraseRow> = []
-    for doc_id in ids {
-        let src = doc_src_path(index_dir, doc_id)
+    for (pi, doc_id) in reg_ids.enumerate() {
+        let src = reg_srcs[pi]
         if src.len() > 0 and src != "-" {
             let full = abs_src_path(src)
             if full.exists() {

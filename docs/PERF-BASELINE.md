@@ -78,6 +78,11 @@ Measured with `scripts/bench-vaisdb-corpus.sh` (deterministic corpus:
 100 words/doc from a 3000-term vocabulary, phrase markers every 100th
 doc; vaisbench median of 3, packaged binaries, query exits normalized).
 
+Pre-batch-registry measurements (the scaling cliff this section was
+created to catch — every `doc_src_path` / `doc_known` / `doc_mtime`
+call re-read and re-split the whole `docs.txt`, so registry-per-doc
+operations went superquadratic):
+
 | Operation | 200 docs | 1000 docs | 5x-docs factor |
 | --- | --- | --- | --- |
 | reindex cold | 783 ms | 54,515 ms | x70 |
@@ -88,15 +93,23 @@ doc; vaisbench median of 3, packaged binaries, query exits normalized).
 | similar doc k=5 | 1,071 ms | 20,998 ms | x20 |
 | top k=10 | 952 ms | 9,980 ms | x10 |
 
-Finding: the doc registry access pattern is the scaling cliff. Every
-`doc_src_path` / `doc_known` / `doc_mtime` call re-reads and re-splits
-the whole `docs.txt`, so operations that consult the registry per
-document go superquadratic in doc count — warm reindex issues ~3
-full-registry reads per doc (deletion sync + membership + stamp), and
-msearch/phrase issue one per candidate doc, which is why they scale at
-~x120 for 5x docs while the shard-driven paths (search x33 with its
-single-shard scan, top x10 with one pass over all shards) stay closer
-to data growth. Improvement candidate (tracked as a follow-up, not part
-of this measurement pass): batch the registry — load `docs.txt` once
-per operation into parallel id/src/mtime tables and thread them down —
-which collapses the per-doc reads to one.
+After the batch registry landed (2026-08-04: `registry_load_into`
+snapshots docs.txt once per operation into parallel id/src/stamp tables
+plus a position map, reindex/msearch/phrase thread it down, and
+`ingest_doc_known` takes the membership decision from the snapshot):
+
+| Operation | 200 docs | 1000 docs | 5x factor | 1000-doc speedup |
+| --- | --- | --- | --- | --- |
+| reindex cold | 312 ms | 1,603 ms | x5.1 | x34 |
+| reindex warm (all skip) | 12 ms | 98 ms | x8 | x2,418 |
+| search term k=10 | 35 ms | 1,075 ms | x31 | ~1x |
+| msearch 2 indexes | 24 ms | 416 ms | x17 | x191 |
+| phrase 2-word | 16 ms | 120 ms | x7.5 | x658 |
+| similar doc k=5 | 1,036 ms | 19,842 ms | x19 | ~1x |
+| top k=10 | 960 ms | 9,966 ms | x10 | ~1x |
+
+Cold reindex now scales linearly in docs (x5.1 for 5x). The remaining
+heavies are shard-scan bound, not registry bound: similar issues one
+shard scan per query term (~95 for a 100-word source) and top walks
+every shard once — both honest O(data) paths, candidates for a later
+cycle if they matter in practice.

@@ -4,6 +4,28 @@
 
 ### Changed
 
+- Killed the vaisdb registry O(D^2) scaling cliff with a batch
+  snapshot: the new `registry_load_into` loads docs.txt once per
+  operation into parallel id/src/stamp tables plus a position map (doc
+  count <= 4095 keeps it inside the 4096 map window), reindex threads
+  it through the deletion sync and the walk — updating the snapshot in
+  place so duplicate-stem behavior is preserved — msearch labels and
+  phrase source lookups read it directly, and the new
+  `ingest_doc_known` takes the membership decision from the snapshot
+  (plain `ingest_doc` delegates through `doc_known` unchanged).
+  Measured at 1000 docs: warm reindex 236,976 -> 98 ms (x2,418), phrase
+  78,996 -> 120 ms (x658), msearch 79,377 -> 416 ms (x191), cold
+  reindex 54,515 -> 1,603 ms (x34) — cold scaling drops from x70 to
+  x5.1 for 5x docs (linear). Behavior-identical: package self-test
+  42/42 on both engines and the full vaisdb workflow gate stay green;
+  docs/PERF-BASELINE.md carries the before/after tables. The remaining
+  heavies (similar, top) are honest shard-scan costs, noted as later
+  candidates. Side note: the snapshot's position-map parameter was
+  renamed away from `pos` — the front's file-scope map-local table
+  false-positived unrelated Int `pos` assignments in the merged module
+  text (a loud misfire, filed as a follow-up to scope those tables per
+  function).
+
 - Added `scripts/bench-vaisdb-corpus.sh`, the large-corpus VaisDB
   timing harness: it generates a deterministic corpus inside the
   documented contracts (docs <= 4095, 3000-term index-wide vocabulary
