@@ -16,7 +16,7 @@ fn eprint(msg: Str) -> Int {
 }
 
 fn roster() -> Str {
-    "vaisdb|vaisgrep|vaismake|vaisfmt|vaisbench|vaisdiff|vaiswc|vaissort|vaisenv|vaistee|vaiscut"
+    "vaisdb|vaisgrep|vaismake|vaisfmt|vaisbench|vaisdiff|vaiswc|vaissort|vaisenv|vaistee|vaiscut|vaisfind|vaisfreq"
 }
 
 fn known_tool(name: Str) -> Int {
@@ -66,14 +66,17 @@ fn self_test() -> Int {
     # Known-tool membership is exact.
     if known_tool("vaisgrep") != 1 { return 1 }
     if known_tool("vaiswc") != 1 { return 2 }
+    if known_tool("vaisfind") != 1 { return 9 }
+    if known_tool("vaisfreq") != 1 { return 10 }
     if known_tool("nope") != 0 { return 3 }
 
-    # The applet list carries all eleven names, one per line.
+    # The applet list carries all thirteen names, one per line.
     let names = tool_list().lines()
     let count = names.len()
-    if count != 11 { return 4 }
+    if count != 13 { return 4 }
     if names[0] != "vaisdb" { return 5 }
     if names[10] != "vaiscut" { return 6 }
+    if names[12] != "vaisfreq" { return 11 }
 
     # proc_self resolves to a real basename we can dispatch on.
     let base = path_basename(proc_self())
@@ -83,8 +86,8 @@ fn self_test() -> Int {
     let dir = self_dir()
     if dir.len() == 0 { return 8 }
 
-    # 11 tools * 4 - 2 = 42
-    count * 4 - 2
+    # 13 tools * 3 + 3 = 42
+    count * 3 + 3
 }
 
 fn main() -> Int {

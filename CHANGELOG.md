@@ -4,6 +4,15 @@
 
 ### Changed
 
+- vaisbox now dispatches all thirteen sibling tools: vaisfind and
+  vaisfreq join the roster (busybox-style applet names, `vaisbox list`,
+  and `vaisbox <tool> [args...]` all pick them up from the single
+  roster literal). The package self-test covers the new membership and
+  the thirteen-name list (arithmetic rebalanced to 13 * 3 + 3 = 42),
+  and the workflow gate packages both new tools next to vaisbox and
+  dispatches them live (vaisfreq over stdin, vaisfind over a fixture
+  tree) alongside the updated list count.
+
 - vaisdb search snippets now highlight the matching terms: every
   query-term occurrence in the snippet line is wrapped with `[` `]`
   markers (`    [cache] hit line here`) in one left-to-right pass —
