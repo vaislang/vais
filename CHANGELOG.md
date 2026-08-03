@@ -4,6 +4,20 @@
 
 ### Changed
 
+- Added `scripts/bench-vaisdb-corpus.sh`, the large-corpus VaisDB
+  timing harness: it generates a deterministic corpus inside the
+  documented contracts (docs <= 4095, 3000-term index-wide vocabulary
+  under the 4096 window, phrase markers every 100th doc), verifies
+  every operation's output once, then times reindex cold/warm, search,
+  msearch, phrase, similar, and top through the packaged vaisbench
+  (median of N; nonzero-by-design query exits normalized). First
+  measurements land in docs/PERF-BASELINE.md: at 1000 docs the
+  registry-per-doc operations go superquadratic (warm reindex x121 for
+  5x docs, msearch x119, phrase x120) because doc_src_path/doc_known/
+  doc_mtime re-read the whole docs.txt per call, while shard-driven
+  paths scale near data growth (top x10). The batch-registry fix is
+  filed as a follow-up; this pass is measurement only.
+
 - vaisbox now dispatches all thirteen sibling tools: vaisfind and
   vaisfreq join the roster (busybox-style applet names, `vaisbox list`,
   and `vaisbox <tool> [args...]` all pick them up from the single

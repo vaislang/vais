@@ -71,3 +71,32 @@ Sum of the pre-dedup ladder chain: ~4143 s (~69 min).
   watches the native smoke gate under a 60 s median budget — ~3.5x the
   17 s baseline, so only real regressions fire — turning this document's
   resume trigger into an automated check.
+
+## VaisDB large-corpus operations (2026-08-03, arm64 macOS)
+
+Measured with `scripts/bench-vaisdb-corpus.sh` (deterministic corpus:
+100 words/doc from a 3000-term vocabulary, phrase markers every 100th
+doc; vaisbench median of 3, packaged binaries, query exits normalized).
+
+| Operation | 200 docs | 1000 docs | 5x-docs factor |
+| --- | --- | --- | --- |
+| reindex cold | 783 ms | 54,515 ms | x70 |
+| reindex warm (all skip) | 1,957 ms | 236,976 ms | x121 |
+| search term k=10 | 35 ms | 1,169 ms | x33 |
+| msearch 2 indexes | 666 ms | 79,377 ms | x119 |
+| phrase 2-word | 658 ms | 78,996 ms | x120 |
+| similar doc k=5 | 1,071 ms | 20,998 ms | x20 |
+| top k=10 | 952 ms | 9,980 ms | x10 |
+
+Finding: the doc registry access pattern is the scaling cliff. Every
+`doc_src_path` / `doc_known` / `doc_mtime` call re-reads and re-splits
+the whole `docs.txt`, so operations that consult the registry per
+document go superquadratic in doc count — warm reindex issues ~3
+full-registry reads per doc (deletion sync + membership + stamp), and
+msearch/phrase issue one per candidate doc, which is why they scale at
+~x120 for 5x docs while the shard-driven paths (search x33 with its
+single-shard scan, top x10 with one pass over all shards) stay closer
+to data growth. Improvement candidate (tracked as a follow-up, not part
+of this measurement pass): batch the registry — load `docs.txt` once
+per operation into parallel id/src/mtime tables and thread them down —
+which collapses the per-doc reads to one.
