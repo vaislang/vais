@@ -8375,6 +8375,7 @@ fn write_accept_source(name: Str, path: Str) -> Int {
     if str_eq(name, "map_param_assignment") == 1 { return write_map_param_assignment(path) }
     if str_eq(name, "map_return_assignment") == 1 { return write_map_return_assignment(path) }
     if str_eq(name, "map_return_assignment_args") == 1 { return write_map_return_assignment_args(path) }
+    if str_eq(name, "map_shadow_name_cross_fn") == 1 { return write_map_shadow_name_cross_fn_accept(path) }
     if str_eq(name, "option") == 1 { return write_option_accept(path) }
     if str_eq(name, "option_expr") == 1 { return write_option_expr_accept(path) }
     if str_eq(name, "option_multiline_expr") == 1 { return write_option_multiline_expr_accept(path) }
@@ -8896,6 +8897,25 @@ fn write_map_return_assignment_args(path: Str) -> Int {
     append_line(out, "        return 42")
     append_line(out, "    }")
     append_line(out, "    return 0")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
+fn write_map_shadow_name_cross_fn_accept(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, str_concat(str_concat("fn lookup(pos: ", map_str_int_compact()), ", key: Str) -> Int {"))
+    append_line(out, "    return pos.get(key, 0)")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let mut pos = 0")
+    append_line(out, "    let n = 40")
+    append_line(out, "    while pos < n {")
+    append_line(out, "        pos += 1")
+    append_line(out, "    }")
+    append_line(out, str_concat(str_concat("    let seen: ", map_str_int_compact()), " = {}"))
+    append_line(out, "    seen.insert(\"a\", 2)")
+    append_line(out, "    return pos + lookup(seen, \"a\")")
     append_line(out, "}")
     return fs_write_text(path, str_builder_finish(out))
 }
@@ -10060,6 +10080,7 @@ fn main() -> Int {
     fail = fail + expect_accept(vaisc, tmp, "map_param_assignment", "accepts Map parameter assignment copy", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_return_assignment", "accepts Map-returning call assignment copy", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_return_assignment_args", "accepts argument Map-returning call assignment copy", 42)
+    fail = fail + expect_accept(vaisc, tmp, "map_shadow_name_cross_fn", "accepts Int local reusing another fn Map param name", 42)
     fail = fail + expect_accept(vaisc, tmp, "map_bool", label_map_bool_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_char", label_map_char_accept(), 42)
     fail = fail + expect_accept(vaisc, tmp, "map_remove", "accepts concrete Map remove slice", 42)

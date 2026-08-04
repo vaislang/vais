@@ -21026,6 +21026,23 @@ static void front_add_map_binding(char **map_names, char **map_types, int *map_c
     }
 }
 
+/* Map/list binding tables hold per-function names (fn-line params and
+ * annotated locals). Merged module text runs every function through one
+ * scan, so entries must not survive into the next function: a
+ * `pos: Map<Str,Int>` param in one fn would otherwise fire the
+ * map-assignment check on an unrelated Int `pos = pos + (1)` in another.
+ * Mirrors front_rebind_reset; signature-level tables (map_fns,
+ * struct_names, callable_names) stay file-wide by design. */
+static void front_fn_scope_reset(char **names, char **types, int *count) {
+    for (int i = 0; i < *count; i++) {
+        free(names[i]);
+        free(types[i]);
+        names[i] = NULL;
+        types[i] = NULL;
+    }
+    *count = 0;
+}
+
 static void front_register_map_params(const char *line, char **map_names, char **map_types, int *map_count) {
     const char *s = skip_ws(line);
     if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return;
@@ -22668,6 +22685,10 @@ static int check_front_contract_text(const char *text, const char *path) {
         const char *line = lines.items[i];
         char *probe = front_probe_line(line);
         int line_no = (int)i + 1;
+        if (starts_with(skip_ws(probe), "fn ")) {
+            front_fn_scope_reset(map_locals, map_types, &map_local_count);
+            front_fn_scope_reset(list_locals, list_types, &list_local_count);
+        }
         issues += front_check_dangling_else_line(path, line_no, line, front_prev_last);
         issues += front_check_rebind_line(path, line_no, line, probe, &rebind_tab);
         {
