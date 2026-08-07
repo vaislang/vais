@@ -9002,6 +9002,16 @@ fn write_unknown_call(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_unknown_variable(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    let text = \"a b\"")
+    append_line(out, "    let n = str_index_of(text, needle)")
+    append_line(out, "    return n + 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_string_escape_accept(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn main() -> Int {")
@@ -9506,6 +9516,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "fstring_open_hole") == 1 { return write_fstring_open_hole_bad(path) }
     if str_eq(name, "bad_main_signature") == 1 { return write_bad_main(path) }
     if str_eq(name, "unknown_call") == 1 { return write_unknown_call(path) }
+    if str_eq(name, "unknown_variable") == 1 { return write_unknown_variable(path) }
     if str_eq(name, "brace_if_expr") == 1 { return write_brace_if_expr(path) }
     if str_eq(name, "helper_missing_return_type") == 1 { return write_helper_missing_return(path) }
     if str_eq(name, name_payload_bad()) == 1 { return write_payload_enum_struct(path) }
@@ -10134,6 +10145,7 @@ fn main() -> Int {
     fail = fail + expect_reject_path(vaisc, tmp, "cycle_import/main", setup_cycle_import(path_join(tmp, "cycle_import")), "import cycle detected", "", "remove one import from the cycle")
     fail = fail + expect_reject(vaisc, tmp, "string_type", "helper parameters must use verified scalar types", "", "Int")
     fail = fail + expect_reject(vaisc, tmp, "unknown_call", "call to an unknown function", "", "documented built-in")
+    fail = fail + expect_reject(vaisc, tmp, "unknown_variable", "is not a defined variable in this function", "", "loop/match binder")
     fail = fail + expect_reject(vaisc, tmp, "brace_if_expr", "if-expression values use `then`/`else`, not braces", "", "brace blocks are statements")
 
     if fail == 0 {

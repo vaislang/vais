@@ -22,7 +22,34 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-08b) — P3 ingest 원자성: fs_rename 승격 + 부분 실패 불변
+## 현재 작업 (2026-08-08c) — 잔여 후보 소탕: unknown-variable front + top 상수
+모드: 개별선택 (2026-08-08 두 사이클의 경유 발견 2건 종결)
+- [x] 1. top 상수 근본 진단 ✅ 2026-08-08 — 격리 프로브(스캔+field_copy만
+      28ms/전샤드)로 빌더 가설 기각: **~31µs/라인의 정체 = totals Map
+      선형 탐색**(~3000 엔트리 × 라인당 contains/get/insert). 교훈 재적중:
+      곡선 관찰만으로 알고리즘 단정 금지, 프리미티브 격리 프로브 먼저.
+- [x] 2. term_totals_into per-shard 로컬 집계 ✅ — term-해시 샤딩이 샤드당
+      distinct ~1/64을 보장하므로 라인당 조회를 로컬 맵(~47)으로, 샤드
+      종료 시 전역 병합. -2 계약 양 경로 보존(로컬 4096 도달 = 전역도
+      초과). **top@1000: 2,945→154ms(19배)**, 출력 200/1000 완전 동일.
+      트랩: 루프 내 재-let 맵은 반복마다 초기화되지 않음 — 루프 밖 선언
+      + 반복 선두 clear()가 정석(초회 시도는 누적 오염+감속으로 실측
+      기각).
+- [x] 3. unknown-variable front 검사 ✅ — fn-스코프 defined-names 테이블
+      (파라미터/let·let (a,b)/for·for (a,b)/Some·Ok·Err 바인더 — 바인더는
+      같은 줄 사용 대비 검사 전 등록, let/for는 검사 후 등록으로 RHS
+      자기참조 차단). 검사는 **소문자-callee 호출의 bare 단일-식별자
+      인자만**(표현식 인자·대문자 생성자 인자 불관여). 삭제된 `let tab`
+      부류가 clang IR 타입 오류 대신 front에서 LOUD 거부. 미정의 재현
+      거부 + 동일-줄 바인더/tuple-for/파라미터 수용 프로브 양 엔진 42 +
+      fixpoint_full 23k줄 스윕 clean + unknown_variable reject 픽스처.
+- [x] 4. 코퍼스 스윕 게이트 + 환류 ✅ — front 334/direct/fixpoint-full/
+      test.sh 410/parity native=410/self/workflow/scale/fmt/release 전
+      체인 GREEN(오탐 0 입증). PERF-BASELINE top 절 갱신, CHANGELOG/
+      WORKLOG 반영.
+진행률: 4/4 (100%) — **양 사이클 경유 발견 소탕 완료, 등록 후보 0건**
+
+## 직전 완료 (2026-08-08b) — P3 ingest 원자성: fs_rename 승격 + 부분 실패 불변
 모드: 개별선택
 - [x] 1. fs_rename(old, new) -> Int 승격 ✅ 2026-08-08 — fs_write_text
       2-인자 미러 클래스(드라이버 14사이트: declare 프리앰블/front
@@ -254,12 +281,10 @@ fixpoint_full.vais 21463 IR / vaisc_native.c 36582 C). 라인 추출 루프
   2026-08-08b: fs_rename 승격 + write_text_atomic + 스캔 dedup + 워크플로
   게이트 +10 — 제품 트랙 후보 전량 종결).
 - ~~P4. 스케일 게이트: vaisbench 예산 모드 래더 편입~~ (완결 2026-07-26k).
-- 미정의 로컬 변수 front 검사(2026-08-08 실측): 삭제된 `let tab` 참조가
-  front를 통과해 clang IR 타입 오류("defined with type 'i64' but
-  expected 'ptr'")로 늦게 표면. unknown-call 검사(front 2-pass)와 같은
-  방식의 unknown-variable 검사 후보.
-- top 잔여 상수(2026-08-08 실측 ~31µs/라인 = str_builder 사이클): 전어휘
-  통계가 실사용에서 뜨거워지면 재사용 빌더/이전-term 바이트 캐시 후보.
+- ~~미정의 로컬 변수 front 검사~~ (완결 2026-08-08c: fn-스코프
+  defined-names + bare 단일-식별자 인자 검사, unknown_variable 픽스처).
+- ~~top 잔여 상수~~ (완결 2026-08-08c: 정체는 빌더가 아니라 **Map 선형
+  탐색** — per-shard 로컬 집계로 2,945→154ms, 19배).
 
 ## 직전 완료 (2026-07-26f) — fuzzing 라운드 8 + 값-정확성 사이클 마감
 모드: 개별선택 (완료까지 자동 진행 — 사용자 지시)

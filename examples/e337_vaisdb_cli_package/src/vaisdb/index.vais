@@ -400,12 +400,24 @@ fn phrase_hits(body: Str, phrase: Str) -> Int {
 # of distinct terms. (Byte scan per shard: posting volume is unbounded,
 # only the distinct-term map is windowed — and removed docs never appear
 # because remove_doc rewrites their posting lines away. The two tabs are
-# walked in place; only the term key is copied out per line.)
+# walked in place; only the term key is copied out per line.) Lines
+# aggregate into a shard-local map first: term-hash sharding puts ~1/64
+# of the vocabulary in one shard, so the per-line lookup scans a few
+# dozen entries instead of the whole index vocabulary — the map's
+# linear find over ~3k terms was the entire top-at-scale cost — and
+# each local map merges into `totals` once per shard. A local map that
+# hits the 4096 window proves the index vocabulary exceeds it too, so
+# the -2 contract is unchanged on both paths.
 fn term_totals_into(index_dir: Str, totals: Map<Str,Int>) -> Int {
     let sc = shard_count()
+    # One shard-local map reused across iterations: a let inside the loop
+    # would keep its slot's prior contents, so the reset is an explicit
+    # clear() at the top of every shard.
+    let local: Map<Str,Int> = {}
     for s in 0..sc {
         let path = index_shard_path(index_dir, s)
         if path.exists() {
+            local.clear()
             let text = path.read()
             let n = text.len()
             let mut pos = 0
@@ -429,15 +441,26 @@ fn term_totals_into(index_dir: Str, totals: Map<Str,Int>) -> Int {
                     if t2 < le {
                         let term = field_copy(text, pos, t1)
                         let add = field_digits(text, t2 + 1, le)
-                        if totals.contains(term) {
-                            totals.insert(term, totals.get(term, 0) + add)
+                        if local.contains(term) {
+                            local.insert(term, local.get(term, 0) + add)
                         } else {
-                            if totals.len() >= 4096 { return 0 - 2 }
-                            totals.insert(term, add)
+                            if local.len() >= 4096 { return 0 - 2 }
+                            local.insert(term, add)
                         }
                     }
                 }
                 pos = le + 1
+            }
+            let ln = local.len()
+            for li in 0..ln {
+                let lt = local.key_at(li)
+                let lv = local.value_at(li)
+                if totals.contains(lt) {
+                    totals.insert(lt, totals.get(lt, 0) + lv)
+                } else {
+                    if totals.len() >= 4096 { return 0 - 2 }
+                    totals.insert(lt, lv)
+                }
             }
         }
     }

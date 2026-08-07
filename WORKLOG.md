@@ -1,5 +1,29 @@
 # Vais Worklog
 
+## 2026-08-08c (잔여 후보 소탕 — unknown-variable front + top Map 선형탐색)
+
+**top 상수의 정체가 뒤집힘.** 후보 등록 시점 추정(~31µs/라인 = str_builder
+사이클)을 격리 프로브가 기각 — 스캔+field_copy+field_digits만으로 전샤드
+28ms. 진짜 비용 = **totals Map의 선형 find**(~3000 어휘 × 라인당
+contains/get/insert ~3회 ≈ 30µs). term-해시 샤딩이 샤드당 어휘를 ~1/64로
+보장하므로 `term_totals_into`를 per-shard 로컬 집계(라인당 ~47 엔트리
+조회) + 샤드별 전역 병합으로 전환. -2 계약 양 경로 보존. **top@1000:
+2,945→154ms(19배)**, 출력 200/1000 바이트 동일. 트랩(패턴 등록): 루프
+본문의 맵 `let`은 반복 간 슬롯 내용이 유지됨 — 루프 밖 선언 + 반복 선두
+`clear()`가 정석(초회 시도는 값 오염+감속으로 즉시 실측 기각됨).
+
+**unknown-variable front 검사 신설.** fn-스코프 defined-names 테이블
+(파라미터/`let`·`let (a,b)`/`for`·tuple-for/`Some·Ok·Err` 바인더).
+등록은 관대하게(바인더는 같은 줄 사용 대비 검사 **전** 등록, let/for는
+검사 **후** 등록 — RHS 자기참조 차단), 검사는 좁게(**소문자-callee
+호출의 bare 단일-식별자 인자만** — 표현식/대문자 생성자 인자 불관여).
+지역변수는 정의-후-사용이 언어 계약이라 단일 전방 스캔으로 충분
+(unknown-call의 2-pass와 대비). 삭제된 `let tab` 부류가 clang IR 타입
+오류 대신 front LOUD 거부. 검증: 미정의 재현 거부 + 동일-줄 match
+바인더/tuple-for/split(tab) 수용 프로브 양 엔진 42 + fixpoint_full
+23k줄 emit-ir 스윕 clean + `unknown_variable` reject 픽스처(front 게이트
+편입) + 전 코퍼스 래더 스윕.
+
 ## 2026-08-08b (P3 ingest 원자성 — fs_rename 승격 + temp-then-rename + 부분 실패 불변)
 
 **제품 트랙 마지막 등록 후보 P3 완결.** fs_rename(old, new) -> Int를

@@ -22692,6 +22692,177 @@ static int front_check_rebind_line(const char *path, int line_no, const char *li
     return 0;
 }
 
+/* Per-function defined-name tracking for the unknown-variable argument
+ * check. Vais locals are strictly defined before use, so one forward
+ * scan per function suffices (unlike calls, which resolve against a
+ * whole-module pass). Registration is deliberately liberal (params,
+ * let/for bindings, match payload binders) and the check deliberately
+ * narrow (a bare single-identifier argument of a lowercase-named
+ * call), so a stale reference — the deleted-`let tab` regression that
+ * previously surfaced as a clang IR type error — fails at the front
+ * with a readable diagnostic, while expression arguments stay outside
+ * the checker's claim. */
+#define FRONT_VAR_CAP 2048
+
+static void front_var_add(char **names, int *count, const char *start, size_t len) {
+    if (len == 0 || *count >= FRONT_VAR_CAP) return;
+    for (int i = 0; i < *count; i++) {
+        if (strlen(names[i]) == len && strncmp(names[i], start, len) == 0) return;
+    }
+    names[*count] = substr_copy(start, len);
+    if (names[*count] != NULL) (*count)++;
+}
+
+static int front_var_known(char **names, int count, const char *s, size_t len) {
+    for (int i = 0; i < count; i++) {
+        if (strlen(names[i]) == len && strncmp(names[i], s, len) == 0) return 1;
+    }
+    return 0;
+}
+
+static void front_vars_reset(char **names, int *count) {
+    for (int i = 0; i < *count; i++) free(names[i]);
+    *count = 0;
+}
+
+static void front_register_param_vars(const char *probe, char **names, int *count) {
+    const char *s = skip_ws(probe);
+    if (!starts_with(s, "fn ")) return;
+    const char *open = strchr(s, '(');
+    const char *close = open == NULL ? NULL : strchr(open, ')');
+    if (open == NULL || close == NULL || close < open) return;
+    char *params = substr_copy(open + 1, (size_t)(close - open - 1));
+    char *parts[16] = {0};
+    int n = split_top_level_type_commas_c(params, parts, 16);
+    free(params);
+    if (n < 0) return;
+    for (int i = 0; i < n; i++) {
+        if (parts[i] != NULL) {
+            const char *p = skip_ws(parts[i]);
+            const char *ns = p;
+            while (is_ident_continue(*p)) p++;
+            if (p > ns && is_ident_start(*ns)) {
+                front_var_add(names, count, ns, (size_t)(p - ns));
+            }
+        }
+        free(parts[i]);
+    }
+}
+
+/* Match payload binders (`Some(x)` / `Ok(x)` / `Err(x)`) register before
+ * the line's argument check runs, because a one-line arm can bind and
+ * use its payload in the same statement. */
+static void front_register_match_binder_vars(const char *probe, char **names, int *count) {
+    static const char *pats[] = {"Some(", "Ok(", "Err(", NULL};
+    for (int k = 0; pats[k] != NULL; k++) {
+        size_t plen = strlen(pats[k]);
+        const char *cursor = probe;
+        const char *hit = NULL;
+        while ((hit = strstr(cursor, pats[k])) != NULL) {
+            cursor = hit + 1;
+            if (hit > probe && is_ident_continue(hit[-1])) continue;
+            const char *p = skip_ws(hit + plen);
+            const char *ns = p;
+            while (is_ident_continue(*p)) p++;
+            if (p == ns || !is_ident_start(*ns)) continue;
+            const char *after = skip_ws(p);
+            if (*after == ')') front_var_add(names, count, ns, (size_t)(p - ns));
+        }
+    }
+}
+
+/* `let [mut] name`, `let (a, b)`, `for x in`, and `for (a, b) in`
+ * bindings, registered after the line's own arguments were checked so a
+ * binding never vouches for a use on its right-hand side. */
+static void front_register_binding_vars(const char *probe, char **names, int *count) {
+    const char *t = skip_ws(probe);
+    const char *p = NULL;
+    if (starts_with(t, "let ")) {
+        p = skip_ws(t + 4);
+        if (starts_with(p, "mut ")) p = skip_ws(p + 4);
+    } else if (starts_with(t, "for ")) {
+        p = skip_ws(t + 4);
+    } else {
+        return;
+    }
+    if (*p == '(') {
+        p = skip_ws(p + 1);
+        while (is_ident_start(*p)) {
+            const char *ns = p;
+            while (is_ident_continue(*p)) p++;
+            front_var_add(names, count, ns, (size_t)(p - ns));
+            p = skip_ws(p);
+            if (*p != ',') break;
+            p = skip_ws(p + 1);
+        }
+        return;
+    }
+    if (!is_ident_start(*p)) return;
+    const char *ns = p;
+    while (is_ident_continue(*p)) p++;
+    front_var_add(names, count, ns, (size_t)(p - ns));
+}
+
+static int front_check_unknown_var_line(const char *path, int line_no, const char *line,
+                                        const char *probe, char **vars, int var_count,
+                                        char **callables, int callable_count, int callable_overflow,
+                                        char **structs, int struct_count) {
+    if (callable_overflow) return 0;
+    int issues = 0;
+    size_t i = 0;
+    while (probe[i] != '\0') {
+        if (!is_ident_start(probe[i]) || (i > 0 && is_ident_continue(probe[i - 1]))) {
+            i++;
+            continue;
+        }
+        size_t ns = i;
+        while (is_ident_continue(probe[i])) i++;
+        if (probe[i] != '(') continue;
+        char callee0 = probe[ns];
+        if (!(islower((unsigned char)callee0) || callee0 == '_')) continue;
+        char cbuf[96];
+        size_t clen = i - ns < sizeof(cbuf) - 1 ? i - ns : sizeof(cbuf) - 1;
+        memcpy(cbuf, probe + ns, clen);
+        cbuf[clen] = '\0';
+        if (front_is_call_keyword(cbuf)) continue;
+        int close = find_matching_paren_c(probe, (int)i);
+        if (close < 0) continue;
+        char *inside = substr_copy(probe + i + 1, (size_t)(close - i - 1));
+        char *trimmed = trim_copy(inside);
+        char *args[16] = {0};
+        int argc = trimmed[0] == '\0' ? 0 : split_top_level_commas_c(inside, args, 16);
+        free(trimmed);
+        free(inside);
+        for (int a = 0; a < argc && a < 16; a++) {
+            if (args[a] == NULL) continue;
+            const char *arg = skip_ws(args[a]);
+            if (!is_ident_start(arg[0]) || isupper((unsigned char)arg[0])) continue;
+            const char *ae = arg;
+            while (is_ident_continue(*ae)) ae++;
+            size_t alen = (size_t)(ae - arg);
+            if (*skip_ws(ae) != '\0') continue;
+            if (strncmp(arg, "__vais_", alen < 7 ? alen : 7) == 0 && alen >= 7) continue;
+            char abuf[96];
+            size_t blen = alen < sizeof(abuf) - 1 ? alen : sizeof(abuf) - 1;
+            memcpy(abuf, arg, blen);
+            abuf[blen] = '\0';
+            if (front_is_call_keyword(abuf)) continue;
+            if (front_var_known(vars, var_count, arg, alen)) continue;
+            if (front_is_builtin_call_name(abuf)) continue;
+            if (front_name_in_list(callables, callable_count, abuf)) continue;
+            if (front_name_in_list(structs, struct_count, abuf)) continue;
+            char summary[160];
+            snprintf(summary, sizeof(summary), "`%s` is not a defined variable in this function", abuf);
+            report_issue(path, line_no, find_col(line, abuf), line, summary,
+                "define it with `let` earlier in the function, bind it as a parameter or loop/match binder, or fix the spelling.",
+                NULL);
+            issues++;
+        }
+        for (int a = 0; a < 16; a++) free(args[a]);
+    }
+    return issues;
+}
+
 static int check_front_contract_text(const char *text, const char *path) {
     LineVec lines = split_lines(text);
     int issues = 0;
@@ -22703,6 +22874,8 @@ static int check_front_contract_text(const char *text, const char *path) {
     char *list_locals[128] = {0};
     char *list_types[128] = {0};
     int list_local_count = 0;
+    char *var_names[FRONT_VAR_CAP] = {0};
+    int var_count = 0;
     char *map_fns[128] = {0};
     char *map_fn_types[128] = {0};
     int map_fn_count = 0;
@@ -22728,7 +22901,14 @@ static int check_front_contract_text(const char *text, const char *path) {
         if (starts_with(skip_ws(probe), "fn ")) {
             front_fn_scope_reset(map_locals, map_types, &map_local_count);
             front_fn_scope_reset(list_locals, list_types, &list_local_count);
+            front_vars_reset(var_names, &var_count);
+            front_register_param_vars(probe, var_names, &var_count);
         }
+        front_register_match_binder_vars(probe, var_names, &var_count);
+        issues += front_check_unknown_var_line(path, line_no, line, probe, var_names, var_count,
+                                               callable_names, callable_count, callable_overflow,
+                                               struct_names, struct_count);
+        front_register_binding_vars(probe, var_names, &var_count);
         issues += front_check_dangling_else_line(path, line_no, line, front_prev_last);
         issues += front_check_rebind_line(path, line_no, line, probe, &rebind_tab);
         {
@@ -22926,6 +23106,7 @@ static int check_front_contract_text(const char *text, const char *path) {
         for (int c = 0; c < callable_count; c++) free(callable_names[c]);
         free(callable_names);
     }
+    front_vars_reset(var_names, &var_count);
     front_rebind_reset(&rebind_tab);
     lines_free(&lines);
     return issues == 0 ? 0 : 1;

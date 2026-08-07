@@ -139,7 +139,12 @@ snapshot for search/similar. Same harness as above:
 | top k=10 | 574 ms | 2,948 ms | x5.1 | x3.4 |
 
 Every read path now scales linearly or better in docs. `top`'s
-remaining constant is the per-line str_builder cycle for the term key
-(~31 us/line over every posting); a reusable builder or a
-previous-term byte-compare cache are the candidates if index-wide term
-stats become hot in practice.
+remaining constant was first attributed to the per-line str_builder
+cycle (~31 us/line); an isolation probe (scan + field extraction with
+no map operations: 28 ms for every shard) refuted that — the cost was
+the totals map's linear find over ~3k vocabulary entries on every
+line's contains/get/insert. 2026-08-08: `term_totals_into` now
+aggregates into a shard-local map first (term-hash sharding keeps one
+shard's vocabulary near 1/64 of the index) and merges per shard, which
+drops **top k=10 at 1,000 docs from 2,948 ms to 154 ms (x19)** with
+byte-identical output at both bench scales.

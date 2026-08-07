@@ -4,6 +4,36 @@
 
 ### Added
 
+- Front unknown-variable check: a bare single-identifier argument of a
+  lowercase-named call must be a parameter, an earlier `let`/`for`
+  binding, or a match payload binder in the enclosing function, so a
+  stale reference (the deleted-`let tab` class) fails at the front
+  with a readable diagnostic instead of surfacing as a clang IR type
+  error. Registration is liberal (params, `let (a, b)`, tuple `for`
+  heads, `Some`/`Ok`/`Err` binders — binders register before the
+  line's check so one-line arms stay valid; `let`/`for` register after
+  it so a binding never vouches for its own right-hand side) and the
+  check is narrow: expression arguments and uppercase constructor
+  arguments stay outside its claim. Locked by the `unknown_variable`
+  front fixture and swept false-positive-free across the whole corpus,
+  tools, and the 23k-line self-host compiler.
+
+### Changed
+
+- Fixed the real cost behind vaisdb `top` at scale: the per-line
+  charge attributed to the term-key str_builder cycle was actually the
+  totals map's linear find over the whole ~3k-term vocabulary on every
+  posting line (an isolation probe measured the full scan plus field
+  extraction at 28 ms without map operations). `term_totals_into` now
+  aggregates each shard into a shard-local map (term-hash sharding
+  keeps one shard's vocabulary near 1/64 of the index) and merges once
+  per shard, preserving the -2 vocabulary-window contract on both
+  paths: top k=10 at 1,000 docs drops 2,948 -> 154 ms (x19) with
+  byte-identical output. Note for the pattern library: a map `let`
+  inside a loop body keeps its slot's prior contents across
+  iterations, so the shard-local map is declared once and reset with
+  `clear()` at the top of every shard.
+
 - `fs_rename(old: Str, new: Str) -> Int`: POSIX rename as a verified
   host API on both engines (0 = success, an existing target is replaced
   atomically within one filesystem, a missing source fails nonzero).
