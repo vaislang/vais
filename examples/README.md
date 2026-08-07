@@ -390,6 +390,9 @@ index for-in heads and typed fresh-list let bindings),
 word-frequency tool (`vaisfreq [-n K] [file...]`) dogfooding the Stage 3c
 surface — tuple returns parse the flag pair and carry the leader row, and
 `rows.take(k)` over sorted struct rows is the report itself,
+`examples/e391_fs_rename_atomic_swap.vais` for `fs_rename` moves, atomic
+replacement of existing targets, nonzero missing-source failure, and the
+temp-then-rename atomic rewrite idiom,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

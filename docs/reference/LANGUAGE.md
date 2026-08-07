@@ -2019,6 +2019,7 @@ fs_list_dirs(dir: Str, out: List<Str>) -> Int
 fs_read_text(path: Str) -> Str
 fs_write_text(path: Str, text: Str) -> Int
 fs_append_text(path: Str, text: Str) -> Int
+fs_rename(old: Str, new: Str) -> Int
 fs_mkdirs(path: Str) -> Int
 fs_remove(path: Str) -> Int
 fs_mtime(path: Str) -> Int

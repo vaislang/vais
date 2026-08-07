@@ -10,6 +10,14 @@
 # contract (docs matched per query). Doc ids are capped by the 4095 list
 # contract when listed; posting volume per shard is unbounded, so every
 # whole-shard walk below stays a byte scan on purpose.
+#
+# Crash model: whole-file rewrites go temp-then-rename (never a torn
+# file), the registry append is each ingest's commit point (a crash
+# before it leaves orphan postings that queries never surface, because
+# ranking walks registry ids), and scan-side last-wins dedup keeps
+# scores exact if a retried ingest duplicates postings until the next
+# update rewrites them away. Diagnostic totals (stats/top) may count
+# orphan or duplicate lines during such a window.
 
 fn shard_count() -> Int {
     64
@@ -41,11 +49,27 @@ fn index_init(index_dir: Str) -> Int {
     fs_mkdirs(path_join(index_dir, "terms"))
 }
 
+# Atomic whole-file rewrite: land the full new content in `<path>.tmp`,
+# then rename it over the target. POSIX rename replaces atomically
+# within one filesystem, so a reader (or a crash) never observes a
+# truncated half-written file — the rewrite either fully lands or the
+# old content survives, with at worst a stale `.tmp` sibling left for
+# index_reset to sweep.
+fn write_text_atomic(path: Str, text: Str) -> Int {
+    let tmp = f"{path}.tmp"
+    if fs_write_text(tmp, text) != 0 { return 1 }
+    fs_rename(tmp, path)
+}
+
 fn index_reset(index_dir: Str) -> Int {
     fs_remove(index_docs_path(index_dir))
+    let docs_tmp = f"{index_docs_path(index_dir)}.tmp"
+    fs_remove(docs_tmp)
     let sc = shard_count()
     for s in 0..sc {
         fs_remove(index_shard_path(index_dir, s))
+        let shard_tmp = f"{index_shard_path(index_dir, s)}.tmp"
+        fs_remove(shard_tmp)
     }
     0
 }
@@ -249,13 +273,19 @@ fn field_digits(text: Str, start: Int, end: Int) -> Int {
 # Stream one shard for one query term, folding weight*count into scores.
 # (Byte scan: a shard's posting volume is unbounded, so no line list; the
 # `term<TAB>` prefix is matched in place, so non-matching lines allocate
-# nothing and only real hits copy their doc field out.)
+# nothing and only real hits copy their doc field out.) Per-doc
+# contributions collect in a last-wins map before folding into scores:
+# a crash-retried ingest can leave duplicate postings for one (term,
+# doc) pair until the next update rewrites them away, and last-wins
+# keeps query scores exact through that window instead of double
+# counting.
 fn scan_term_scores(index_dir: Str, term: Str, weight: Int, scores: Map<Str,Int>) -> Int {
     let path = index_shard_path(index_dir, term_shard(term))
     if not path.exists() { return 0 }
     let text = path.read()
     let n = text.len()
     let tn = term.len()
+    let contrib: Map<Str,Int> = {}
     let mut pos = 0
     let mut hits = 0
     while pos < n {
@@ -283,13 +313,18 @@ fn scan_term_scores(index_dir: Str, term: Str, weight: Int, scores: Map<Str,Int>
                 }
                 if de < le {
                     let doc = field_copy(text, ds, de)
-                    let prev = scores.get(doc, 0)
-                    scores.insert(doc, prev + weight * field_digits(text, de + 1, le))
+                    contrib.insert(doc, weight * field_digits(text, de + 1, le))
                     hits += 1
                 }
             }
         }
         pos = le + 1
+    }
+    let cn = contrib.len()
+    for ci in 0..cn {
+        let cd = contrib.key_at(ci)
+        let prev = scores.get(cd, 0)
+        scores.insert(cd, prev + contrib.value_at(ci))
     }
     hits
 }
@@ -413,7 +448,9 @@ fn term_totals_into(index_dir: Str, totals: Map<Str,Int>) -> Int {
 # when the pair has no posting. Backs the `why` per-term breakdown.
 # (An odd `tick and the apostrophe above lock the comment-quote scanner
 # regression: whole-text pass gates must never open string state here.
-# Both key fields are compared in place, so the lookup allocates nothing.)
+# Both key fields are compared in place, so the lookup allocates
+# nothing, and the last matching line wins so `why` agrees with the
+# scan-side dedup over crash-retried duplicate postings.)
 fn term_doc_count(index_dir: Str, term: Str, doc_id: Str) -> Int {
     let path = index_shard_path(index_dir, term_shard(term))
     if not path.exists() { return 0 }
@@ -421,6 +458,7 @@ fn term_doc_count(index_dir: Str, term: Str, doc_id: Str) -> Int {
     let n = text.len()
     let tn = term.len()
     let dn = doc_id.len()
+    let mut found = 0
     let mut pos = 0
     while pos < n {
         let mut le = pos
@@ -451,14 +489,14 @@ fn term_doc_count(index_dir: Str, term: Str, doc_id: Str) -> Int {
                         j += 1
                     }
                     if dsame == 1 {
-                        return field_digits(text, ds + dn + 1, le)
+                        found = field_digits(text, ds + dn + 1, le)
                     }
                 }
             }
         }
         pos = le + 1
     }
-    0
+    found
 }
 
 fn doc_score(index_dir: Str, doc_id: Str, query: Map<Str,Int>) -> Int {
@@ -526,7 +564,7 @@ fn remove_doc(index_dir: Str, doc_id: Str) -> Int {
                 pos = le + 1
             }
             let kept = str_builder_finish(b)
-            if path.write(kept) != 0 { return 0 - 1 }
+            if write_text_atomic(path, kept) != 0 { return 0 - 1 }
         }
     }
     # Rewrite docs.txt preserving full `id<TAB>path` lines.
@@ -544,7 +582,7 @@ fn remove_doc(index_dir: Str, doc_id: Str) -> Int {
         }
     }
     let kept_docs = str_builder_finish(b2)
-    if docs_path.write(kept_docs) != 0 { return 0 - 1 }
+    if write_text_atomic(docs_path, kept_docs) != 0 { return 0 - 1 }
     removed
 }
 

@@ -1,5 +1,34 @@
 # Vais Worklog
 
+## 2026-08-08b (P3 ingest 원자성 — fs_rename 승격 + temp-then-rename + 부분 실패 불변)
+
+**제품 트랙 마지막 등록 후보 P3 완결.** fs_rename(old, new) -> Int를
+fs_write_text 2-인자 미러 클래스로 승격(드라이버 14사이트: declare
+프리앰블/front 허용목록/direct 인식기·디스패치 체인·방출·타입추론/
+프로토타입/호스트 런타임 impl). **fixpoint_full·core 무변경 적중** —
+Int-반환 호스트 호출은 일반 호출로 로워링되고 declare 프리앰블이
+시그니처를 공급(Str-반환만 is_host_str_return 테이블). POSIX 시맨틱
+(존재 타깃 원자 교체/소스부재 nonzero) e391 잠금, parity 등록.
+
+vaisdb 크래시 모델 확립: ① write_text_atomic(temp-then-rename)으로
+remove_doc의 샤드+레지스트리 재작성 원자화 — torn-file 부류 근절,
+index_reset이 .tmp 스윕. ② 레지스트리 append = ingest 커밋 포인트
+(크래시 시 고아 포스팅 = 랭킹이 레지스트리 id를 걷기에 불가시). ③
+스캔 last-wins dedup(스캔별 contrib 맵 → fold) — 크래시-재시도 중복
+포스팅에도 점수 정확, why는 last-match 정합. stats/top 진단 카운트는
+창 내 과대 가능(헤더 문서화).
+
+워크플로 게이트 +10 불변 케이스: 중복 포스팅 점수 불변(구 코드면
+a1=4로 실패하는 실검증)/why 정합/고아 불가시+랭킹 불변/오염 위 reindex
+수렴(update의 remove_doc이 중복 일소)/remove 무-tmp/스테일 tmp 무시.
+성능 회귀 없음(search 17ms/similar 56ms/cold reindex 1.4s @1000).
+
+트랩: ① 예제 번호는 flat .vais만 세면 오판 — e390이 패키지 디렉토리로
+선점되어 e391로 개번(ls examples/ 전체로 확인). ② 신규 예제는 첫 줄
+`# expect: 42` 마커 필수 — 없으면 test.sh가 skip(=1)하고 parity가
+"manifest path has no # expect"로 실패(수동 실행 42만 믿으면 늦게
+잡힘).
+
 ## 2026-08-08 (VaisDB 읽기 경로 스케일 — str_slice 2차 근본수정 + 셸소트 + 스캐너 in-place)
 
 **진단이 두 번 뒤집힌 사이클.** 벤치의 search x31 초선형에서 출발 →

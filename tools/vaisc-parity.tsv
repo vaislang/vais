@@ -416,3 +416,4 @@ examples/e326_cli_binary_target/src/main.vais	native-supported	Package binary ta
 examples/e328_cli_package_assets/src/main.vais	native-supported	Package assets example keeps optional manifest assets metadata aligned with file-entry execution.
 examples/e337_vaisdb_cli_package/src/main.vais	native-supported	Installable vaisdb CLI package self-test keeps the multi-module package entry aligned with file-entry execution.
 examples/e390_vaisfreq_package/src/main.vais	native-supported	Installable vaisfreq top-K word-frequency tool dogfoods the Stage 3c surface: mixed tuple returns for flag parsing and the leader row, and take(k) as the report semantic over sorted struct rows.
+examples/e391_fs_rename_atomic_swap.vais	native-supported	fs_rename moves and atomically replaces files with nonzero missing-source failure, backing the temp-then-rename atomic rewrite idiom.

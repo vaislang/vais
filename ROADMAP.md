@@ -22,7 +22,33 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-07) — VaisDB 읽기 경로 스케일 (벤치 잔여 헤비 소탕)
+## 현재 작업 (2026-08-08b) — P3 ingest 원자성: fs_rename 승격 + 부분 실패 불변
+모드: 개별선택
+- [x] 1. fs_rename(old, new) -> Int 승격 ✅ 2026-08-08 — fs_write_text
+      2-인자 미러 클래스(드라이버 14사이트: declare 프리앰블/front
+      허용목록/direct 인식기·디스패치·방출·타입추론/직접 C 프로토타입/
+      호스트 런타임 impl). **fixpoint_full·core 무변경 적중**(Int-반환
+      호스트 호출은 일반 호출 로워링 — Str-반환만 테이블). POSIX 덮어
+      쓰기·소스부재 nonzero 잠금: e391 양 엔진 42, parity 등록,
+      PRELUDE/LANGUAGE 반영.
+- [x] 2. vaisdb 원자화 ✅ — write_text_atomic(temp-then-rename)으로
+      remove_doc 샤드+docs.txt 재작성 전환(torn-file 부류 근절),
+      index_reset이 .tmp 잔재 스윕, 크래시 모델 헤더 문서화(레지스트리
+      append = 커밋 포인트).
+- [x] 3. 스캔 dedup(last-wins) ✅ — scan_term_scores 스캔별 contrib 맵
+      → fold(크래시-재시도 중복 포스팅에도 점수 정확), term_doc_count
+      last-match로 why 정합. stats/top 진단 카운트는 창 내 과대 가능
+      (문서화).
+- [x] 4. 부분 실패 불변 게이트 ✅ — 워크플로 게이트 +10 케이스(중복
+      포스팅 점수 불변 — 구 코드면 a1=4로 실패하는 실검증/why 정합/
+      고아 포스팅 불가시+랭킹 불변/reindex 수렴/remove 무-tmp/스테일
+      tmp 무시). 성능 회귀 없음(search 17ms/similar 56ms/cold 1.4s).
+진행률: 4/4 (100%) — **제품 트랙 후보 P1~P4 전량 종결.** 게이트: front/
+direct/fixpoint-full/test.sh 410(e391 편입)/parity native=410/self-host/
+fmt/release 전부 GREEN. 트랩: 신규 예제는 첫 줄 `# expect: 42` 마커
+필수(없으면 test.sh skip + parity 실패).
+
+## 직전 완료 (2026-08-07) — VaisDB 읽기 경로 스케일 (벤치 잔여 헤비 소탕)
 모드: 개별선택 (2026-08-04 벤치의 search x31 초선형·similar 19.8s·top 10s)
 진단 실측: search 44→522→1441ms(5x docs→33x), why 16→86→230ms(N²).
 격리 프로브(1000행 39ms→3000행 283ms, split 유무 무관)로 **진짜 근본 =
@@ -224,7 +250,9 @@ fixpoint_full.vais 21463 IR / vaisc_native.c 36582 C). 라인 추출 루프
 - ~~P2. 디스크-우선 인덱스: term-샤딩 포스팅 파일, corpus_l(374) green~~
   (완결 a2d27dc4: 64샤드 terms/s<N>.txt, corpus_l 374파일 0.9s/23,114
   포스팅 — VAISDB-SCALE-BASELINE.md:68).
-- P3. ingest 원자성: temp-then-rename, 부분 실패 불변 게이트.
+- ~~P3. ingest 원자성: temp-then-rename, 부분 실패 불변 게이트~~ (완결
+  2026-08-08b: fs_rename 승격 + write_text_atomic + 스캔 dedup + 워크플로
+  게이트 +10 — 제품 트랙 후보 전량 종결).
 - ~~P4. 스케일 게이트: vaisbench 예산 모드 래더 편입~~ (완결 2026-07-26k).
 - 미정의 로컬 변수 front 검사(2026-08-08 실측): 삭제된 `let tab` 참조가
   front를 통과해 clang IR 타입 오류("defined with type 'i64' but

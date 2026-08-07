@@ -1,0 +1,44 @@
+# expect: 42
+# fs_rename(old, new) -> Int: 0 on success, nonzero on failure. POSIX
+# rename semantics — renaming onto an existing target replaces it
+# atomically within one filesystem, which is the primitive behind the
+# temp-then-rename atomic rewrite idiom (write `<path>.tmp`, then
+# rename it over `<path>` so readers never observe a torn file).
+fn write_text_atomic(path: Str, text: Str) -> Int {
+    let tmp = f"{path}.tmp"
+    if fs_write_text(tmp, text) != 0 { return 1 }
+    fs_rename(tmp, path)
+}
+
+fn main() -> Int {
+    let root = fs_temp_dir()
+    let a = path_join(root, "vais-e390-a.txt")
+    let b = path_join(root, "vais-e390-b.txt")
+    let seed = fs_remove(a)
+    let seed2 = fs_remove(b)
+
+    # plain rename moves the file
+    if fs_write_text(a, "hello") != 0 { return 1 }
+    if fs_rename(a, b) != 0 { return 2 }
+    if a.exists() { return 3 }
+    if b.read() != "hello" { return 4 }
+
+    # renaming onto an existing target replaces it
+    if fs_write_text(a, "second") != 0 { return 5 }
+    if fs_rename(a, b) != 0 { return 6 }
+    if a.exists() { return 7 }
+    if b.read() != "second" { return 8 }
+
+    # a missing source fails with a nonzero code and leaves the target
+    if fs_rename(a, b) == 0 { return 9 }
+    if b.read() != "second" { return 10 }
+
+    # the temp-then-rename idiom lands the full new content or nothing
+    if write_text_atomic(b, "third round") != 0 { return 11 }
+    if b.read() != "third round" { return 12 }
+    let tmp_gone = f"{b}.tmp"
+    if tmp_gone.exists() { return 13 }
+
+    let done = fs_remove(b)
+    return 42
+}

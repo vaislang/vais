@@ -579,6 +579,31 @@ expect_exit "vaisdb phrase ranks occurrences and spans newlines" 0 /bin/sh -c "o
 2. p2=1' ]"
 expect_exit "vaisdb phrase word order matters" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' phrase '$phrase_idx' 'win big cache' | grep -qx '1. p1=1'"
 expect_exit "vaisdb phrase empty phrase errors" 1 /bin/sh -c "'$vdb_dist/bin/vaisdb' phrase '$phrase_idx' '   ' | grep -qx 'error: phrase has no terms' && exit 1"
+
+# Partial-failure invariants: a crash mid-ingest leaves either duplicate
+# postings (retry after the shard appends) or orphan postings (no
+# registry commit). Queries must stay exact through both, rewrites must
+# never leave temp litter behind, and stale temp litter must never leak
+# into results.
+atomic_docs="$tmp/vaisdb-atomic-docs"
+atomic_idx="$tmp/vaisdb-atomic-idx"
+rm -rf "$atomic_docs" "$atomic_idx"
+mkdir -p "$atomic_docs"
+printf 'alpha beta alpha\n' > "$atomic_docs/a1.txt"
+printf 'beta gamma\n' > "$atomic_docs/a2.txt"
+touch -t 202001010000 "$atomic_docs/a1.txt"
+expect_exit "vaisdb atomic index builds" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$atomic_idx' '$atomic_docs' | grep -qx 'reindexed added=2 updated=0 removed=0 skipped=0'"
+expect_exit "vaisdb atomic baseline score" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$atomic_idx' alpha 3 | grep -q '^1\. a1=2 '"
+alpha_pat="$(printf 'alpha\ta1\t')"
+expect_exit "vaisdb atomic duplicate posting keeps scores exact" 0 /bin/sh -c "shard=\$(grep -l \"^$alpha_pat\" '$atomic_idx/terms/'*.txt); grep -h \"^$alpha_pat\" \"\$shard\" >> \"\$shard\"; '$vdb_dist/bin/vaisdb' search '$atomic_idx' alpha 3 | grep -q '^1\. a1=2 '"
+expect_exit "vaisdb atomic why agrees over duplicates" 2 "$vdb_dist/bin/vaisdb" why "$atomic_idx" alpha a1
+expect_exit "vaisdb atomic orphan postings stay invisible" 0 /bin/sh -c "shard=\$(grep -l \"^$alpha_pat\" '$atomic_idx/terms/'*.txt); printf 'alpha\tghost\t9\n' >> \"\$shard\"; ! '$vdb_dist/bin/vaisdb' search '$atomic_idx' alpha 5 | grep -q ghost"
+expect_exit "vaisdb atomic ranking unchanged beside orphans" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$atomic_idx' alpha 3 | grep -q '^1\. a1=2 '"
+printf 'alpha beta alpha\n' > "$atomic_docs/a1.txt"
+expect_exit "vaisdb atomic reindex converges over litter" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$atomic_idx' '$atomic_docs' | grep -qx 'reindexed added=0 updated=1 removed=0 skipped=1'"
+expect_exit "vaisdb atomic converged score stays exact" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$atomic_idx' alpha 3 | grep -q '^1\. a1=2 '"
+expect_exit "vaisdb atomic remove leaves no temp litter" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' remove '$atomic_idx' a2 >/dev/null; ls '$atomic_idx/terms/'*.txt.tmp 2>/dev/null && exit 1; test -f '$atomic_idx/docs.txt.tmp' && exit 1; exit 0"
+expect_exit "vaisdb atomic stale temp litter is ignored" 0 /bin/sh -c "printf 'junk with no tabs\n' > '$atomic_idx/terms/s5.txt.tmp'; '$vdb_dist/bin/vaisdb' search '$atomic_idx' alpha 3 | grep -q '^1\. a1=2 '"
 rm "$reindex_docs/r2.txt"
 expect_exit "vaisdb reindex removes deleted docs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=0 removed=1 skipped=1'"
 expect_exit "vaisdb reindex removed doc leaves search" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$reindex_idx' gamma 2 | cmp -s - /dev/null"

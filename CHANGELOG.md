@@ -2,7 +2,34 @@
 
 ## Unreleased
 
+### Added
+
+- `fs_rename(old: Str, new: Str) -> Int`: POSIX rename as a verified
+  host API on both engines (0 = success, an existing target is replaced
+  atomically within one filesystem, a missing source fails nonzero).
+  This is the temp-then-rename atomic-rewrite primitive; locked by
+  examples/e391_fs_rename_atomic_swap.vais in the parity manifest and
+  documented in std/PRELUDE.md and docs/reference/LANGUAGE.md. The full
+  engine needed no core change — Int-returning host calls lower as
+  plain calls with the driver's declare preamble supplying signatures.
+
 ### Changed
+
+- Made vaisdb crash-consistent around partial ingest and remove
+  failures: every whole-file rewrite (remove_doc's shard rewrites and
+  the registry rewrite) lands through a temp-then-rename
+  `write_text_atomic`, so a torn half-written file can no longer
+  survive a crash; `index_reset` sweeps stale `.tmp` litter. The
+  registry append stays each ingest's commit point (a crash before it
+  leaves orphan postings that ranking never surfaces), and the shard
+  scanners now fold per-doc contributions through a last-wins map, so
+  a crash-retried ingest's duplicate postings keep query scores exact
+  until the next update rewrites them away (`why` matches via
+  last-match; stats/top diagnostic totals may count litter during the
+  window, documented in the index header). Ten partial-failure
+  invariant cases join the vaisdb workflow gate — duplicate-posting
+  score exactness, orphan invisibility, reindex convergence over
+  litter, no temp litter after remove, and stale litter ignored.
 
 - Root-fixed the toolchain-wide quadratic in line extraction: the
   runtime `__vais_str_slice` re-scans the whole source string on every
