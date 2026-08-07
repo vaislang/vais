@@ -16231,10 +16231,13 @@ static int lower_list_discard_statement_line(const char *line, int *temp_count, 
 
 /*
  * `xs.sort()` statement on a List<Int> receiver: desugar into an in-place
- * ascending insertion sort over verified surface (nested while loops, element
- * reads into locals, indexed element assignment). One text rewrite serves the
- * full, embed, and direct pipelines alike, so neither engine needs new
- * codegen or runtime helpers.
+ * ascending shell sort (3x+1 gaps ending in a plain insertion pass) over
+ * verified surface (nested while loops, element reads into locals, indexed
+ * element assignment). Gapped insertion keeps the worst case near N^1.5,
+ * which stays sub-millisecond at the 4095 list cap — the previous plain
+ * insertion desugar went quadratic on reversed input. One text rewrite
+ * serves the full, embed, and direct pipelines alike, so neither engine
+ * needs new codegen or runtime helpers.
  */
 static int lower_list_sort_statement_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
     const char *s = skip_ws(line);
@@ -16262,36 +16265,44 @@ static int lower_list_sort_statement_line(const char *line, int *temp_count, Lis
     }
 
     int t = (*temp_count)++;
-    char i_var[48], key_var[48], j_var[48], go_var[48], p_var[48], v_var[48];
+    char i_var[48], key_var[48], j_var[48], go_var[48], p_var[48], v_var[48], gap_var[48];
     snprintf(i_var, sizeof(i_var), "__vais_sort_i%d", t);
     snprintf(key_var, sizeof(key_var), "__vais_sort_key%d", t);
     snprintf(j_var, sizeof(j_var), "__vais_sort_j%d", t);
     snprintf(go_var, sizeof(go_var), "__vais_sort_go%d", t);
     snprintf(p_var, sizeof(p_var), "__vais_sort_p%d", t);
     snprintf(v_var, sizeof(v_var), "__vais_sort_v%d", t);
+    snprintf(gap_var, sizeof(gap_var), "__vais_sort_h%d", t);
 
     const char *body[] = {
-        "let mut %I = 1",
-        "while %I < %N.len() {",
-        "    let %K = %N[%I]",
-        "    let mut %J = %I",
-        "    let mut %G = 1",
-        "    while %G == 1 {",
-        "        if %J > 0 {",
-        "            let %P = %J - 1",
-        "            let %V = %N[%P]",
-        is_str ? "            if str_cmp(%V, %K) > 0 {" : "            if %V > %K {",
-        "                %N[%J] = %V",
-        "                %J = %P",
+        "let mut %H = 1",
+        "while %H * 3 + 1 < %N.len() {",
+        "    %H = %H * 3 + 1",
+        "}",
+        "while %H >= 1 {",
+        "    let mut %I = %H",
+        "    while %I < %N.len() {",
+        "        let %K = %N[%I]",
+        "        let mut %J = %I",
+        "        let mut %G = 1",
+        "        while %G == 1 {",
+        "            if %J >= %H {",
+        "                let %P = %J - %H",
+        "                let %V = %N[%P]",
+        is_str ? "                if str_cmp(%V, %K) > 0 {" : "                if %V > %K {",
+        "                    %N[%J] = %V",
+        "                    %J = %P",
+        "                } else {",
+        "                    %G = 0",
+        "                }",
         "            } else {",
         "                %G = 0",
         "            }",
-        "        } else {",
-        "            %G = 0",
         "        }",
+        "        %N[%J] = %K",
+        "        %I = %I + 1",
         "    }",
-        "    %N[%J] = %K",
-        "    %I = %I + 1",
+        "    %H = %H / 3",
         "}",
     };
     size_t body_len = sizeof(body) / sizeof(body[0]);
@@ -16308,6 +16319,7 @@ static int lower_list_sort_statement_line(const char *line, int *temp_count, Lis
                 else if (*c == 'G') sb_append(&b, go_var);
                 else if (*c == 'P') sb_append(&b, p_var);
                 else if (*c == 'V') sb_append(&b, v_var);
+                else if (*c == 'H') sb_append(&b, gap_var);
                 else if (*c == 'N') sb_append(&b, name);
                 else { sb_append_n(&b, c - 1, 2); }
             } else {
@@ -16322,10 +16334,14 @@ static int lower_list_sort_statement_line(const char *line, int *temp_count, Lis
 
 /*
  * `xs.sort_by(|x| x.field)` / `xs.sort_by_desc(|x| x.field)` statements on a
- * List<Struct> receiver keyed by an Int field: desugar into the in-place
- * selection sort proven by examples/e332 (field comparisons on indexed
- * elements plus whole-element swaps through a temporary struct local), so
- * both engines share the one lowering, mirroring List<Int>.sort().
+ * List<Struct> receiver keyed by an Int field: desugar into an in-place
+ * gapped-insertion shell sort (3x+1 gaps, final gap-1 pass) built from the
+ * primitives proven by examples/e332 (field comparisons on indexed elements,
+ * whole-element reads into a struct local, indexed element assignment), so
+ * both engines share the one lowering, mirroring List<Int>.sort(). The
+ * previous selection-sort desugar was always-quadratic: ranking 1000 docs
+ * spent ~500k comparisons per sort and dominated vaisdb search at scale.
+ * Neither the old nor the new order is stable across equal keys.
  */
 static int lower_list_sort_by_statement_line(const char *line, int *temp_count, ListMethodEnv *env, LineVec *out) {
     const char *s = skip_ws(line);
@@ -16384,27 +16400,47 @@ static int lower_list_sort_by_statement_line(const char *line, int *temp_count, 
     free(elem);
 
     int t = (*temp_count)++;
-    char i_var[48], b_var[48], j_var[48], t_var[48];
+    char i_var[48], k_var[48], j_var[48], m_var[48], p_var[48], v_var[48], gap_var[48];
     snprintf(i_var, sizeof(i_var), "__vais_sortby_i%d", t);
-    snprintf(b_var, sizeof(b_var), "__vais_sortby_b%d", t);
+    snprintf(k_var, sizeof(k_var), "__vais_sortby_k%d", t);
     snprintf(j_var, sizeof(j_var), "__vais_sortby_j%d", t);
-    snprintf(t_var, sizeof(t_var), "__vais_sortby_t%d", t);
+    snprintf(m_var, sizeof(m_var), "__vais_sortby_m%d", t);
+    snprintf(p_var, sizeof(p_var), "__vais_sortby_p%d", t);
+    snprintf(v_var, sizeof(v_var), "__vais_sortby_v%d", t);
+    snprintf(gap_var, sizeof(gap_var), "__vais_sortby_h%d", t);
 
+    /* Gapped insertion shifts while the earlier element sorts after the key,
+     * so ascending shifts on `>` and descending shifts on `<` — the inverse
+     * of the old selection desugar's best-pick comparator. */
     const char *body[] = {
-        "let mut %I = 0",
-        "while %I < %N.len() {",
-        "    let mut %B = %I",
-        "    let mut %J = %I + 1",
-        "    while %J < %N.len() {",
-        "        if %N[%J].%F %C %N[%B].%F { %B = %J }",
-        "        %J = %J + 1",
+        "let mut %H = 1",
+        "while %H * 3 + 1 < %N.len() {",
+        "    %H = %H * 3 + 1",
+        "}",
+        "while %H >= 1 {",
+        "    let mut %I = %H",
+        "    while %I < %N.len() {",
+        "        let %K = %N[%I]",
+        "        let mut %J = %I",
+        "        let mut %M = 1",
+        "        while %M == 1 {",
+        "            if %J >= %H {",
+        "                let %P = %J - %H",
+        "                let %V = %N[%P]",
+        "                if %V.%F %C %K.%F {",
+        "                    %N[%J] = %V",
+        "                    %J = %P",
+        "                } else {",
+        "                    %M = 0",
+        "                }",
+        "            } else {",
+        "                %M = 0",
+        "            }",
+        "        }",
+        "        %N[%J] = %K",
+        "        %I = %I + 1",
         "    }",
-        "    if %B != %I {",
-        "        let %T = %N[%I]",
-        "        %N[%I] = %N[%B]",
-        "        %N[%B] = %T",
-        "    }",
-        "    %I = %I + 1",
+        "    %H = %H / 3",
         "}",
     };
     size_t body_len = sizeof(body) / sizeof(body[0]);
@@ -16416,12 +16452,15 @@ static int lower_list_sort_by_statement_line(const char *line, int *temp_count, 
             if (*c == '%' && c[1] != '\0') {
                 c++;
                 if (*c == 'I') sb_append(&b, i_var);
-                else if (*c == 'B') sb_append(&b, b_var);
+                else if (*c == 'K') sb_append(&b, k_var);
                 else if (*c == 'J') sb_append(&b, j_var);
-                else if (*c == 'T') sb_append(&b, t_var);
+                else if (*c == 'M') sb_append(&b, m_var);
+                else if (*c == 'P') sb_append(&b, p_var);
+                else if (*c == 'V') sb_append(&b, v_var);
+                else if (*c == 'H') sb_append(&b, gap_var);
                 else if (*c == 'N') sb_append(&b, name);
                 else if (*c == 'F') sb_append(&b, field);
-                else if (*c == 'C') sb_append(&b, desc ? ">" : "<");
+                else if (*c == 'C') sb_append(&b, desc ? "<" : ">");
                 else { sb_append_n(&b, c - 1, 2); }
             } else {
                 sb_append_n(&b, c, 1);
@@ -36541,6 +36580,11 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "static long __vais_str_ends_with(const char *text, const char *suffix) { size_t n = strlen(text); size_t m = strlen(suffix); return m <= n && strcmp(text + n - m, suffix) == 0 ? 1 : 0; }\n");
     sb_append(&out, "static void __vais_list_trap(int kind) { if (kind == 5) fprintf(stderr, \"vais trap: out of memory\\n\"); else if (kind == 4) fprintf(stderr, \"vais str trap: slice or byte out of range\\n\"); else if (kind == 3) fprintf(stderr, \"vais list trap: capacity exceeded (fixed list contract)\\n\"); else if (kind == 2) fprintf(stderr, \"vais list trap: empty-list access\\n\"); else fprintf(stderr, \"vais list trap: index out of range\\n\"); abort(); }\n");
     sb_append(&out, "static const char *__vais_str_slice(const char *s, long start, long len) { size_t n = strlen(s); if (start < 0 || len < 0 || (size_t)start > n || (size_t)len > n - (size_t)start) __vais_list_trap(4); char *out = (char *)malloc((size_t)len + 1); if (out == NULL) return \"\"; memcpy(out, s + start, (size_t)len); out[len] = '\\0'; return out; }\n");
+    /* Runtime-internal slice for builtins that already walked the text and
+     * own the bounds: the user-facing __vais_str_slice re-runs strlen on
+     * every call for its trap contract, which turned every per-line slice
+     * loop (lines/split/token scans) quadratic in the source size. */
+    sb_append(&out, "static const char *__vais_str_slice_raw(const char *s, long start, long len) { char *out = (char *)malloc((size_t)len + 1); if (out == NULL) return \"\"; memcpy(out, s + start, (size_t)len); out[len] = '\\0'; return out; }\n");
     sb_append(&out, "static const char *__vais_str_concat(const char *left, const char *right) { size_t a = strlen(left); size_t b = strlen(right); char *out = (char *)malloc(a + b + 1); if (out == NULL) return \"\"; memcpy(out, left, a); memcpy(out + a, right, b); out[a + b] = '\\0'; return out; }\n");
     sb_append(&out, "static const char *__vais_str_replace(const char *text, const char *needle, const char *replacement) { size_t tn = strlen(text), nn = strlen(needle), rn = strlen(replacement); if (nn == 0) { char *copy = (char *)malloc(tn + 1); if (copy == NULL) return \"\"; memcpy(copy, text, tn + 1); return copy; } size_t count = 0; const char *scan = text; const char *hit = NULL; while ((hit = strstr(scan, needle)) != NULL) { count++; scan = hit + nn; } size_t out_len = rn >= nn ? tn + count * (rn - nn) : tn - count * (nn - rn); char *out = (char *)malloc(out_len + 1); if (out == NULL) return \"\"; const char *src = text; size_t pos = 0; while ((hit = strstr(src, needle)) != NULL) { size_t chunk = (size_t)(hit - src); memcpy(out + pos, src, chunk); pos += chunk; memcpy(out + pos, replacement, rn); pos += rn; src = hit + nn; } size_t tail = strlen(src); memcpy(out + pos, src, tail); pos += tail; out[pos] = '\\0'; return out; }\n");
     sb_append(&out, "static int __vais_str_trim_space(unsigned char c) { return c == 32 || (c >= 9 && c <= 13); }\n");
@@ -36559,13 +36603,13 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "typedef struct { long data[VAIS_DIRECT_LIST_CAP]; long len; } DirectListInt;\n");
     sb_append(&out, "typedef struct { const char *data[VAIS_DIRECT_LIST_CAP]; long len; } DirectList_Str;\n");
     sb_append(&out, "static const char *__vais_str_join(DirectList_Str *parts, const char *sep) { size_t sn = strlen(sep); size_t total = 0; for (long i = 0; i < parts->len; i++) { total += strlen(parts->data[i]); if (i > 0) total += sn; } char *out = (char *)malloc(total + 1); if (out == NULL) return \"\"; size_t pos = 0; for (long i = 0; i < parts->len; i++) { if (i > 0) { memcpy(out + pos, sep, sn); pos += sn; } size_t pn = strlen(parts->data[i]); memcpy(out + pos, parts->data[i], pn); pos += pn; } out[pos] = '\\0'; return out; }\n");
-    sb_append(&out, "static long __vais_str_split_ws_into(const char *text, DirectList_Str *out) { out->len = 0; long i = 0; while (text[i] != '\\0') { while (text[i] != '\\0' && __vais_str_trim_space((unsigned char)text[i])) i++; long start = i; while (text[i] != '\\0' && !__vais_str_trim_space((unsigned char)text[i])) i++; if (i > start) { if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice(text, start, i - start); } } return out->len; }\n");
-    sb_append(&out, "static long __vais_str_split_lines_into(const char *text, DirectList_Str *out) { out->len = 0; long i = 0; long start = 0; while (text[i] != '\\0') { if (text[i] == '\\n') { long len = i - start; if (len > 0 && text[i - 1] == '\\r') len--; if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice(text, start, len); i++; start = i; } else { i++; } } if (i > start) { long len = i - start; if (len > 0 && text[i - 1] == '\\r') len--; if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice(text, start, len); } return out->len; }\n");
+    sb_append(&out, "static long __vais_str_split_ws_into(const char *text, DirectList_Str *out) { out->len = 0; long i = 0; while (text[i] != '\\0') { while (text[i] != '\\0' && __vais_str_trim_space((unsigned char)text[i])) i++; long start = i; while (text[i] != '\\0' && !__vais_str_trim_space((unsigned char)text[i])) i++; if (i > start) { if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice_raw(text, start, i - start); } } return out->len; }\n");
+    sb_append(&out, "static long __vais_str_split_lines_into(const char *text, DirectList_Str *out) { out->len = 0; long i = 0; long start = 0; while (text[i] != '\\0') { if (text[i] == '\\n') { long len = i - start; if (len > 0 && text[i - 1] == '\\r') len--; if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice_raw(text, start, len); i++; start = i; } else { i++; } } if (i > start) { long len = i - start; if (len > 0 && text[i - 1] == '\\r') len--; if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice_raw(text, start, len); } return out->len; }\n");
 
     sb_append(&out, "static int __vais_fs_list_name_cmp(const void *a, const void *b) { return strcmp(*(const char *const *)a, *(const char *const *)b); }\n");
     sb_append(&out, "static long __vais_fs_list_files(const char *dir, DirectList_Str *out) { out->len = 0; if (dir == 0) return 0; DIR *d = opendir(dir); if (d == 0) return 0; struct dirent *entry; while ((entry = readdir(d)) != 0) { if (strcmp(entry->d_name, \".\") == 0 || strcmp(entry->d_name, \"..\") == 0) continue; size_t dn = strlen(dir); size_t en = strlen(entry->d_name); char *full = (char *)malloc(dn + en + 2); if (full == 0) { closedir(d); __vais_list_trap(5); } memcpy(full, dir, dn); full[dn] = '/'; memcpy(full + dn + 1, entry->d_name, en + 1); struct stat st; int is_file = stat(full, &st) == 0 && S_ISREG(st.st_mode); free(full); if (!is_file) continue; if (out->len >= VAIS_DIRECT_LIST_CAP) { closedir(d); __vais_list_trap(3); } char *copy = (char *)malloc(en + 1); if (copy == 0) { closedir(d); __vais_list_trap(5); } memcpy(copy, entry->d_name, en + 1); out->data[out->len++] = copy; } closedir(d); qsort(out->data, (size_t)out->len, sizeof(char *), __vais_fs_list_name_cmp); return out->len; }\n");
     sb_append(&out, "static long __vais_fs_list_dirs(const char *dir, DirectList_Str *out) { out->len = 0; if (dir == 0) return 0; DIR *d = opendir(dir); if (d == 0) return 0; struct dirent *entry; while ((entry = readdir(d)) != 0) { if (strcmp(entry->d_name, \".\") == 0 || strcmp(entry->d_name, \"..\") == 0) continue; size_t dn = strlen(dir); size_t en = strlen(entry->d_name); char *full = (char *)malloc(dn + en + 2); if (full == 0) { closedir(d); __vais_list_trap(5); } memcpy(full, dir, dn); full[dn] = '/'; memcpy(full + dn + 1, entry->d_name, en + 1); struct stat st; int is_dir = stat(full, &st) == 0 && S_ISDIR(st.st_mode); free(full); if (!is_dir) continue; if (out->len >= VAIS_DIRECT_LIST_CAP) { closedir(d); __vais_list_trap(3); } char *copy = (char *)malloc(en + 1); if (copy == 0) { closedir(d); __vais_list_trap(5); } memcpy(copy, entry->d_name, en + 1); out->data[out->len++] = copy; } closedir(d); qsort(out->data, (size_t)out->len, sizeof(char *), __vais_fs_list_name_cmp); return out->len; }\n");
-    sb_append(&out, "static long __vais_str_split_into(const char *text, const char *sep, DirectList_Str *out) { out->len = 0; size_t sn = strlen(sep); if (sn == 0) { if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice(text, 0, (long)strlen(text)); return out->len; } const char *cursor = text; const char *hit = NULL; while ((hit = strstr(cursor, sep)) != NULL) { if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice(text, (long)(cursor - text), (long)(hit - cursor)); cursor = hit + sn; } if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice(text, (long)(cursor - text), (long)strlen(cursor)); return out->len; }\n");
+    sb_append(&out, "static long __vais_str_split_into(const char *text, const char *sep, DirectList_Str *out) { out->len = 0; size_t sn = strlen(sep); if (sn == 0) { if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice_raw(text, 0, (long)strlen(text)); return out->len; } const char *cursor = text; const char *hit = NULL; while ((hit = strstr(cursor, sep)) != NULL) { if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice_raw(text, (long)(cursor - text), (long)(hit - cursor)); cursor = hit + sn; } if (out->len >= VAIS_DIRECT_LIST_CAP) __vais_list_trap(3); out->data[out->len++] = __vais_str_slice_raw(text, (long)(cursor - text), (long)strlen(cursor)); return out->len; }\n");
     sb_append(&out, "static long __vais_list_int_sum(DirectListInt *xs) { long total = 0; for (long i = 0; i < xs->len; i++) total += xs->data[i]; return total; }\n");
     sb_append(&out, "static long __vais_list_int_max(DirectListInt *xs) { if (xs->len <= 0) __vais_list_trap(2); long best = xs->data[0]; for (long i = 1; i < xs->len; i++) if (xs->data[i] > best) best = xs->data[i]; return best; }\n");
     sb_append(&out, "static long __vais_list_int_min(DirectListInt *xs) { if (xs->len <= 0) __vais_list_trap(2); long best = xs->data[0]; for (long i = 1; i < xs->len; i++) if (xs->data[i] < best) best = xs->data[i]; return best; }\n");
@@ -36605,7 +36649,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "static long __vais_map_str_int_len(DirectMapStrInt *m) { return m->len; }\n");
     sb_append(&out, "static const char *__vais_map_str_int_key_at(DirectMapStrInt *m, long index) { if (index < 0 || index >= m->len) __vais_list_trap(0); return m->keys[index]; }\n");
     sb_append(&out, "static long __vais_map_str_int_value_at(DirectMapStrInt *m, long index) { if (index < 0 || index >= m->len) __vais_list_trap(0); return m->values[index]; }\n");
-    sb_append(&out, "static long __vais_doc_term_counts_into(const char *text, DirectMapStrInt *out) { __vais_map_str_int_clear(out); long total = 0; long i = 0; while (text[i] != '\\0') { while (text[i] != '\\0' && __vais_str_trim_space((unsigned char)text[i])) i++; long start = i; while (text[i] != '\\0' && !__vais_str_trim_space((unsigned char)text[i])) i++; if (i > start) { const char *raw = __vais_str_slice(text, start, i - start); const char *token = __vais_str_lower(raw); long prev = __vais_map_str_int_get(out, token, 0); __vais_map_str_int_insert(out, token, prev + 1); total++; } } return total; }\n");
+    sb_append(&out, "static long __vais_doc_term_counts_into(const char *text, DirectMapStrInt *out) { __vais_map_str_int_clear(out); long total = 0; long i = 0; while (text[i] != '\\0') { while (text[i] != '\\0' && __vais_str_trim_space((unsigned char)text[i])) i++; long start = i; while (text[i] != '\\0' && !__vais_str_trim_space((unsigned char)text[i])) i++; if (i > start) { const char *raw = __vais_str_slice_raw(text, start, i - start); const char *token = __vais_str_lower(raw); long prev = __vais_map_str_int_get(out, token, 0); __vais_map_str_int_insert(out, token, prev + 1); total++; } } return total; }\n");
     sb_append(&out, "static long __vais_doc_term_overlap_score(DirectMapStrInt *query, DirectMapStrInt *doc) { long score = 0; for (long i = 0; i < query->len; i++) { long qv = query->values[i]; long dv = __vais_map_str_int_get(doc, query->keys[i], 0); score += qv < dv ? qv : dv; } return score; }\n");
     sb_append(&out, "static long __vais_doc_term_weighted_score(DirectMapStrInt *query, DirectMapStrInt *doc) { long score = 0; for (long i = 0; i < query->len; i++) { long qv = query->values[i]; long dv = __vais_map_str_int_get(doc, query->keys[i], 0); score += qv * dv; } return score; }\n");
     sb_append(&out, "typedef struct { const char *keys[4096]; const char *values[4096]; unsigned char present[4096]; long len; } DirectMapStrStr;\n");
@@ -36621,7 +36665,7 @@ static char *direct_lower_to_c(const char *path, const char *raw) {
     sb_append(&out, "static const char *__vais_map_str_str_key_at(DirectMapStrStr *m, long index) { if (index < 0 || index >= m->len) __vais_list_trap(0); return m->keys[index]; }\n");
     sb_append(&out, "static const char *__vais_map_str_str_value_at(DirectMapStrStr *m, long index) { if (index < 0 || index >= m->len) __vais_list_trap(0); return m->values[index]; }\n");
     sb_append(&out, "static const char *__vais_map_str_str_snapshot(DirectMapStrStr *m) { size_t total = 0; for (long i = 0; i < m->len; i++) { if (!m->present[i]) continue; total += strlen(m->keys[i]) + strlen(m->values[i]) + 2; } char *out = (char *)malloc(total + 1); if (out == NULL) return \"\"; size_t pos = 0; for (long i = 0; i < m->len; i++) { if (!m->present[i]) continue; size_t kn = strlen(m->keys[i]); size_t vn = strlen(m->values[i]); memcpy(out + pos, m->keys[i], kn); pos += kn; out[pos++] = '='; memcpy(out + pos, m->values[i], vn); pos += vn; out[pos++] = '\\n'; } out[pos] = '\\0'; return out; }\n");
-    sb_append(&out, "static long __vais_map_str_str_load_snapshot_line(const char *text, DirectMapStrStr *out, long start, long end, long eq) { while (end > start && text[end - 1] == '\\r') end--; if (eq < start || eq >= end || eq == start) return 0; const char *key = __vais_str_slice(text, start, eq - start); const char *value = __vais_str_slice(text, eq + 1, end - eq - 1); __vais_map_str_str_insert(out, key, value); return 1; }\n");
+    sb_append(&out, "static long __vais_map_str_str_load_snapshot_line(const char *text, DirectMapStrStr *out, long start, long end, long eq) { while (end > start && text[end - 1] == '\\r') end--; if (eq < start || eq >= end || eq == start) return 0; const char *key = __vais_str_slice_raw(text, start, eq - start); const char *value = __vais_str_slice_raw(text, eq + 1, end - eq - 1); __vais_map_str_str_insert(out, key, value); return 1; }\n");
     sb_append(&out, "static long __vais_map_str_str_load_snapshot(const char *text, DirectMapStrStr *out) { __vais_map_str_str_clear(out); long count = 0; long i = 0; long start = 0; long eq = -1; while (text[i] != '\\0') { if (text[i] == '\\n') { count += __vais_map_str_str_load_snapshot_line(text, out, start, i, eq); i++; start = i; eq = -1; } else { if (text[i] == '=' && eq < 0) eq = i; i++; } } count += __vais_map_str_str_load_snapshot_line(text, out, start, i, eq); return count; }\n");
     for (int s = 0; s < struct_count; s++) {
         sb_append(&out, "typedef struct {");

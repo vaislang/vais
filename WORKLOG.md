@@ -1,5 +1,45 @@
 # Vais Worklog
 
+## 2026-08-08 (VaisDB 읽기 경로 스케일 — str_slice 2차 근본수정 + 셸소트 + 스캐너 in-place)
+
+**진단이 두 번 뒤집힌 사이클.** 벤치의 search x31 초선형에서 출발 →
+1차 가설(sort_by 선택정렬 N²)은 셸소트 교체 후에도 곡선 불변으로 기각
+→ 격리 프로브(`for line in text.lines()`만으로 1000행 39ms/3000행
+283ms, split 유무 무관)로 **진짜 근본 = `__vais_str_slice`가 호출마다
+소스 전체 strlen 스캔**(trap 계약용 경계검사)을 확정. 라인 추출 루프
+전부가 파일 크기 2차였고 similar 19.8s(95스캔×O(n²))/top 10s(64샤드
+전량)가 전부 이 하나로 환원.
+
+수정 3종: ① 빌트인 내부 전용 `__vais_str_slice_raw`(malloc+copy만,
+경계는 호출측 스캔이 보증) — full IR 프리루드 9곳 + direct C 런타임
+9곳 미러 전환, 사용자-레벨 trap 계약(kind 4, 134) 불변. ②
+`.sort()`/`.sort_by(_desc)` 데수가를 3x+1 갭 셸소트로(선택정렬은
+항상-N², 비교자 매핑 반전 주의: desc가 `>`→`<`). ③ vaisdb 스캐너
+in-place화(field_copy/field_digits, 프리픽스 비교로 불일치 라인 무할당
+skip) + search/similar 레지스트리 스냅샷 1회.
+
+**core 재생성 정본 경로 확정**: self-probe 복제가 아니라 **드라이버
+emit-ir 세대 루프**(설치→rm -f build/vaisc→재방출). gen1은 구 core가
+방출한 구 프리루드를 담아 gen1!=gen2가 정상이고 gen2==gen3로 수렴
+(and/or 커밋 패턴 재현). self-probe 산물은 declare 프리앰블 부재 +
+라벨 번호 상이로 정본과 다름 — 혼동 금지.
+
+실측(공식 벤치 200/1000, median 3): search 1075→14ms(x77), similar
+19842→59ms(x336), msearch 416→17ms(x24), top 9966→2948ms(x3.4), warm
+reindex 98→23ms. 5x 스케일 팩터 search x1.75/similar x3.9/top
+x5.1(전부 선형 이하). 격리 프로브 3000행 lines() 283→9ms.
+
+게이트: fmt/front/direct/fixpoint-full/test.sh 409/parity 409/
+fixpoint-full-self/vaisdb-workflow/vaisdb-scale 전부 GREEN. 구/신
+바이너리 출력 6연산 완전 일치 + remove 기능 프로브.
+
+경유 발견·트랩: ① 미정의 로컬(`tab`) 참조가 front 통과 후 clang IR
+타입 오류로 늦게 표면 — unknown-variable front 검사 후보 등록. ②
+vaisdb self-test 스크래치 exit 2는 구/신 동일(기존 동작, 회귀 아님).
+③ zsh 루프 미인용 변수 함정 재발(전 케이스 usage exit 2 공허 비교) —
+명시 커맨드 재검증으로 배제. ④ top 잔여 상수 ~31µs/라인(빌더 사이클)
+후보 기록.
+
 ## 2026-08-04 (front 진단 정밀도 — map/list 테이블 fn-스코프)
 
 **2026-07-26m 후보 완결**: check_front_contract_text의 map_locals/

@@ -160,6 +160,14 @@ fn run_search(index_dir: Str, query_text: Str, k: Int) -> Int {
         print("error: index has no documents")
         return 3
     }
+    # One registry snapshot resolves every shown hit's source path (the
+    # msearch pattern); the per-hit doc_src_path re-read the whole
+    # registry k times.
+    let reg_ids: List<Str> = []
+    let reg_srcs: List<Str> = []
+    let reg_stamps: List<Int> = []
+    let reg_pos: Map<Str,Int> = {}
+    let rn = registry_load_into(index_dir, reg_ids, reg_srcs, reg_stamps, reg_pos)
     let mut limit = k
     if count < k { limit = count }
     let mut shown = 0
@@ -168,7 +176,9 @@ fn run_search(index_dir: Str, query_text: Str, k: Int) -> Int {
         if hit.score > 0 {
             shown += 1
             let doc_id = hit.doc_id
-            let src = doc_src_path(index_dir, doc_id)
+            let hp = reg_pos.get(doc_id, 0)
+            let mut src = ""
+            if hp > 0 { src = reg_srcs[hp - 1] }
             let mut line = f"{shown}. {doc_id}={hit.score}"
             if src != "" and src != "-" {
                 line = f"{line} {src}"
@@ -363,7 +373,15 @@ fn run_similar(index_dir: Str, doc_id: Str, k: Int) -> Int {
         print("error: index not found")
         return 3
     }
-    if doc_known(index_dir, doc_id) != 1 {
+    # One registry snapshot answers membership and the source path
+    # (doc_known + doc_src_path each re-read the whole registry).
+    let reg_ids: List<Str> = []
+    let reg_srcs: List<Str> = []
+    let reg_stamps: List<Int> = []
+    let reg_pos: Map<Str,Int> = {}
+    let rn = registry_load_into(index_dir, reg_ids, reg_srcs, reg_stamps, reg_pos)
+    let sp = reg_pos.get(doc_id, 0)
+    if sp == 0 {
         print("error: doc not found")
         return 3
     }
@@ -371,7 +389,7 @@ fn run_similar(index_dir: Str, doc_id: Str, k: Int) -> Int {
         print("error: similar count must be positive")
         return 1
     }
-    let src = doc_src_path(index_dir, doc_id)
+    let src = reg_srcs[sp - 1]
     if src == "" or src == "-" {
         print("error: doc has no on-disk source")
         return 3

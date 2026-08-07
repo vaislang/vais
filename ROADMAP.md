@@ -22,6 +22,48 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
+## 현재 작업 (2026-08-07) — VaisDB 읽기 경로 스케일 (벤치 잔여 헤비 소탕)
+모드: 개별선택 (2026-08-04 벤치의 search x31 초선형·similar 19.8s·top 10s)
+진단 실측: search 44→522→1441ms(5x docs→33x), why 16→86→230ms(N²).
+격리 프로브(1000행 39ms→3000행 283ms, split 유무 무관)로 **진짜 근본 =
+`__vais_str_slice`가 호출마다 소스 전체 strlen 스캔**(양 엔진 동형:
+fixpoint_full.vais 21463 IR / vaisc_native.c 36582 C). 라인 추출 루프
+전부가 파일 크기 2차 — lines()/split 빌트인 내부 슬라이스(레지스트리
+경로), index.vais 수동 스캐너의 라인 슬라이스(샤드 경로: similar=95스캔
+×O(n²), top=64샤드 전량)가 이 하나로 환원. 정렬 데수가 N²(선택정렬)은
+부차 원인으로 실측 확인(교체해도 곡선 불변).
+- [x] 1. 정렬 데수가 셸 정렬화 ✅ 2026-08-07 — `.sort()`(삽입)·
+      `.sort_by(_desc)`(선택) 둘 다 3x+1 갭 셸 정렬(기존 %G-플래그 삽입
+      패턴 동형, 캡 4095에서 최악 ~26만 스텝, 비교자 매핑 반전 주의:
+      선택 best-pick desc=`>` → 삽입 shift-test desc=`<`). e335/e336/
+      e340/e332 양 엔진 42. 부차 원인이지만 항상-N² 낭비 제거.
+- [x] 2. str_slice strlen root-fix ✅ 2026-08-08 — `__vais_str_slice_raw`
+      (malloc+copy만) 신설, 빌트인 내부 호출 **9+9곳**(full IR 프리루드 /
+      direct C 런타임 미러) 전환. 사용자-레벨 trap 계약(kind 4, 134)
+      프로브로 불변 확인. core는 emit-ir 세대 루프(세대 사이 rm -f
+      build/vaisc)로 재생성, **gen2==gen3 fixpoint**. 격리 프로브:
+      3000행 .lines() 283→9ms. **정본 재생성 경로 확정: self-probe가
+      아니라 드라이버 emit-ir 루프**(gen1은 구 프리루드 탑재가 정상,
+      and/or 커밋의 gen1!=gen2·gen2==gen3 패턴 재현).
+- [x] 3. vaisdb 스캐너 in-place화 + 스냅샷 ✅ — field_copy/field_digits
+      헬퍼, scan_term_scores/term_doc_count(프리픽스 비교, 불일치 무할당
+      skip)/term_totals_into(탭 2개 워크, term 키만 복사)/remove_doc
+      (doc 필드 in-place 매치+바이트 복사) 재작성, run_search 히트당
+      doc_src_path→스냅샷 1회, run_similar 3독→1독. 구/신 출력 6연산
+      완전 일치 + remove 기능 프로브 green. 경유 발견: 미정의 로컬
+      (`tab`)이 front를 통과해 clang IR 타입 오류로 늦게 표면 —
+      unknown-variable front 검사 후보 등록.
+- [x] 4. 재실측+게이트+환류 ✅ — 공식 벤치(200/1000): search 1075→14ms
+      (x77)/similar 19842→59ms(x336)/msearch x24/top x3.4, 5x 스케일
+      팩터 search x1.75·similar x3.9·top x5.1(전부 선형 이하).
+      PERF-BASELINE/CHANGELOG 갱신. 게이트: fmt/front/direct/
+      fixpoint-full/test.sh 409/parity 409/fixpoint-full-self/
+      vaisdb-workflow/vaisdb-scale 전부 GREEN. 트랩 노트: vaisdb
+      self-test 스크래치 exit 2는 구/신 동일(기존 동작), zsh 루프
+      미인용 변수 함정 재발(명시 커맨드로 재검증). top 잔여 상수
+      (~31µs/라인 빌더 사이클)는 후보로 기록.
+진행률: 4/4 (100%) — **읽기 경로 전 연산 선형화**
+
 ## 직전 완료 (2026-08-04) — front 진단 정밀도: map/list 테이블 fn-스코프
 모드: 개별선택
 - [x] 1. 근본수정 ✅ 2026-08-04 — check_front_contract_text의 map_locals/
@@ -178,10 +220,18 @@ This file tracks current work and completed gate-backed language surface.
 진행률: 3/3 (100%)
 
 ### VaisDB 제품 트랙 다음 후보
-- P1. Map 계약 상향(컴파일러): cap 256→4096, trap·게이트 정합, 양 엔진.
-- P2. 디스크-우선 인덱스: term-샤딩 포스팅 파일, corpus_l(374) green.
+- ~~P1. Map 계약 상향(컴파일러): cap 256→4096~~ (완결: PRELUDE 4096 계약).
+- ~~P2. 디스크-우선 인덱스: term-샤딩 포스팅 파일, corpus_l(374) green~~
+  (완결 a2d27dc4: 64샤드 terms/s<N>.txt, corpus_l 374파일 0.9s/23,114
+  포스팅 — VAISDB-SCALE-BASELINE.md:68).
 - P3. ingest 원자성: temp-then-rename, 부분 실패 불변 게이트.
-- P4. 스케일 게이트: vaisbench 예산 모드 래더 편입.
+- ~~P4. 스케일 게이트: vaisbench 예산 모드 래더 편입~~ (완결 2026-07-26k).
+- 미정의 로컬 변수 front 검사(2026-08-08 실측): 삭제된 `let tab` 참조가
+  front를 통과해 clang IR 타입 오류("defined with type 'i64' but
+  expected 'ptr'")로 늦게 표면. unknown-call 검사(front 2-pass)와 같은
+  방식의 unknown-variable 검사 후보.
+- top 잔여 상수(2026-08-08 실측 ~31µs/라인 = str_builder 사이클): 전어휘
+  통계가 실사용에서 뜨거워지면 재사용 빌더/이전-term 바이트 캐시 후보.
 
 ## 직전 완료 (2026-07-26f) — fuzzing 라운드 8 + 값-정확성 사이클 마감
 모드: 개별선택 (완료까지 자동 진행 — 사용자 지시)

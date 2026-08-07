@@ -4,6 +4,50 @@
 
 ### Changed
 
+- Root-fixed the toolchain-wide quadratic in line extraction: the
+  runtime `__vais_str_slice` re-scans the whole source string on every
+  call to honor its bounds-trap contract, so every per-line slice loop
+  (`.lines()`, `.split(sep)`, whitespace tokenization, snapshot loads)
+  went quadratic in the text size. Builtins that already walk the text
+  and own the bounds now call a runtime-internal `__vais_str_slice_raw`
+  (allocate+copy only) on both engines — nine emission sites in the
+  full core's IR prelude and the mirrored nine in the direct C runtime.
+  The user-level `str_slice` trap contract (kind 4, SIGABRT 134) is
+  unchanged. `compiler/self/vaisc_core.ll` regenerated through the
+  emit-ir generation loop to the gen2 == gen3 fixpoint. Isolation
+  probe: iterating a 3,000-line file's `.lines()` drops 283 -> 9 ms.
+
+- Replaced the `.sort()` insertion-sort and `.sort_by(_desc)`
+  selection-sort desugars with a 3x+1 gapped-insertion shell sort
+  (same verified-surface primitives, one shared lowering for both
+  engines). The selection desugar was always-quadratic — ranking 1,000
+  docs spent ~500k comparisons per sort; the gap sequence keeps the
+  worst case near N^1.5, sub-millisecond at the 4095 list cap. Neither
+  the old nor the new order was stable across equal keys, and the
+  comparator mapping inverts (selection best-pick desc used `>`, the
+  insertion shift-test uses `<`).
+
+- Rewrote the vaisdb shard scanners to match posting fields in place
+  instead of slicing every line out of the whole shard text:
+  `scan_term_scores` / `term_doc_count` compare the `term<TAB>` prefix
+  byte-wise and allocate nothing on non-matching lines,
+  `term_totals_into` walks the two tabs and copies only the term key,
+  and `remove_doc` matches the doc field in place and byte-copies kept
+  lines. `search` resolves shown-hit source paths from one registry
+  snapshot (the msearch pattern) instead of a per-hit registry re-read,
+  and `similar` answers membership and the source path from the same
+  single snapshot. Output-identical on a 1,000-doc corpus across
+  search/rank/why/top/similar/stats.
+
+- Read-path scale results at 1,000 docs (vaisbench median of 3, after
+  the three changes above): search 1,075 -> 14 ms (x77), similar
+  19,842 -> 59 ms (x336), msearch 416 -> 17 ms (x24), phrase 120 ->
+  44 ms, top 9,966 -> 2,948 ms (x3.4), warm reindex 98 -> 23 ms; 5x-doc
+  scaling factors are now search x1.75, similar x3.9, top x5.1
+  (linear). Remaining `top` cost is the per-line str_builder cycle for
+  the term key (~31 us/line), noted as a later candidate alongside
+  reusable builders.
+
 - Killed the vaisdb registry O(D^2) scaling cliff with a batch
   snapshot: the new `registry_load_into` loads docs.txt once per
   operation into parallel id/src/stamp tables plus a position map (doc

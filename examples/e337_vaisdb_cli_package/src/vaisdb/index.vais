@@ -218,14 +218,44 @@ fn doc_mtime(index_dir: Str, doc_id: Str) -> Int {
     0
 }
 
+# Byte-window helpers for the shard scanners: copy or parse one field of
+# a posting line without slicing it out of the whole shard text. The
+# user-level str_slice re-validates its bounds against the full source on
+# every call, which made per-line slicing quadratic in the shard size;
+# these walk offsets the scan loop already proved in-bounds.
+fn field_copy(text: Str, start: Int, end: Int) -> Str {
+    let b = str_builder_new()
+    let mut i = start
+    while i < end {
+        let pushed = str_builder_push(b, text[i])
+        i += 1
+    }
+    str_builder_finish(b)
+}
+
+fn field_digits(text: Str, start: Int, end: Int) -> Int {
+    let mut v = 0
+    let mut i = start
+    while i < end {
+        let c = text[i]
+        if c >= 48 and c <= 57 {
+            v = v * 10 + (c - 48)
+        }
+        i += 1
+    }
+    v
+}
+
 # Stream one shard for one query term, folding weight*count into scores.
-# (Byte scan: a shard's posting volume is unbounded, so no line list.)
+# (Byte scan: a shard's posting volume is unbounded, so no line list; the
+# `term<TAB>` prefix is matched in place, so non-matching lines allocate
+# nothing and only real hits copy their doc field out.)
 fn scan_term_scores(index_dir: Str, term: Str, weight: Int, scores: Map<Str,Int>) -> Int {
     let path = index_shard_path(index_dir, term_shard(term))
     if not path.exists() { return 0 }
-    let tab = "\t"
     let text = path.read()
     let n = text.len()
+    let tn = term.len()
     let mut pos = 0
     let mut hits = 0
     while pos < n {
@@ -234,14 +264,29 @@ fn scan_term_scores(index_dir: Str, term: Str, weight: Int, scores: Map<Str,Int>
             if text[le] == 10 { break }
             le += 1
         }
-        if le > pos {
-            let line = str_slice(text, pos, le - pos)
-            let parts = line.split(tab)
-            if parts.len() == 3 and parts[0] == term {
-                let doc = parts[1]
-                let prev = scores.get(doc, 0)
-                scores.insert(doc, prev + weight * parse_int(parts[2]))
-                hits += 1
+        if pos + tn < le and text[pos + tn] == 9 {
+            let mut k = 0
+            let mut same = 1
+            while k < tn {
+                if text[pos + k] != term[k] {
+                    same = 0
+                    break
+                }
+                k += 1
+            }
+            if same == 1 {
+                let ds = pos + tn + 1
+                let mut de = ds
+                while de < le {
+                    if text[de] == 9 { break }
+                    de += 1
+                }
+                if de < le {
+                    let doc = field_copy(text, ds, de)
+                    let prev = scores.get(doc, 0)
+                    scores.insert(doc, prev + weight * field_digits(text, de + 1, le))
+                    hits += 1
+                }
             }
         }
         pos = le + 1
@@ -319,9 +364,9 @@ fn phrase_hits(body: Str, phrase: Str) -> Int {
 # when the index vocabulary exceeds the 4096 map window, else the number
 # of distinct terms. (Byte scan per shard: posting volume is unbounded,
 # only the distinct-term map is windowed — and removed docs never appear
-# because remove_doc rewrites their posting lines away.)
+# because remove_doc rewrites their posting lines away. The two tabs are
+# walked in place; only the term key is copied out per line.)
 fn term_totals_into(index_dir: Str, totals: Map<Str,Int>) -> Int {
-    let tab = "\t"
     let sc = shard_count()
     for s in 0..sc {
         let path = index_shard_path(index_dir, s)
@@ -335,16 +380,25 @@ fn term_totals_into(index_dir: Str, totals: Map<Str,Int>) -> Int {
                     if text[le] == 10 { break }
                     le += 1
                 }
-                if le > pos {
-                    let line = str_slice(text, pos, le - pos)
-                    let parts = line.split(tab)
-                    if parts.len() == 3 {
-                        let term = parts[0]
+                let mut t1 = pos
+                while t1 < le {
+                    if text[t1] == 9 { break }
+                    t1 += 1
+                }
+                if t1 > pos and t1 < le {
+                    let mut t2 = t1 + 1
+                    while t2 < le {
+                        if text[t2] == 9 { break }
+                        t2 += 1
+                    }
+                    if t2 < le {
+                        let term = field_copy(text, pos, t1)
+                        let add = field_digits(text, t2 + 1, le)
                         if totals.contains(term) {
-                            totals.insert(term, totals.get(term, 0) + parse_int(parts[2]))
+                            totals.insert(term, totals.get(term, 0) + add)
                         } else {
                             if totals.len() >= 4096 { return 0 - 2 }
-                            totals.insert(term, parse_int(parts[2]))
+                            totals.insert(term, add)
                         }
                     }
                 }
@@ -358,17 +412,51 @@ fn term_totals_into(index_dir: Str, totals: Map<Str,Int>) -> Int {
 # Count of one term inside one document, read from the term's shard; 0
 # when the pair has no posting. Backs the `why` per-term breakdown.
 # (An odd `tick and the apostrophe above lock the comment-quote scanner
-# regression: whole-text pass gates must never open string state here.)
+# regression: whole-text pass gates must never open string state here.
+# Both key fields are compared in place, so the lookup allocates nothing.)
 fn term_doc_count(index_dir: Str, term: Str, doc_id: Str) -> Int {
     let path = index_shard_path(index_dir, term_shard(term))
     if not path.exists() { return 0 }
-    let tab = str_byte(9)
-    let body = path.read()
-    for line in body.lines() {
-        let parts = line.split(tab)
-        if parts.len() == 3 and parts[0] == term and parts[1] == doc_id {
-            return parse_int(parts[2])
+    let text = path.read()
+    let n = text.len()
+    let tn = term.len()
+    let dn = doc_id.len()
+    let mut pos = 0
+    while pos < n {
+        let mut le = pos
+        while le < n {
+            if text[le] == 10 { break }
+            le += 1
         }
+        if pos + tn < le and text[pos + tn] == 9 {
+            let mut k = 0
+            let mut same = 1
+            while k < tn {
+                if text[pos + k] != term[k] {
+                    same = 0
+                    break
+                }
+                k += 1
+            }
+            if same == 1 {
+                let ds = pos + tn + 1
+                if ds + dn < le and text[ds + dn] == 9 {
+                    let mut j = 0
+                    let mut dsame = 1
+                    while j < dn {
+                        if text[ds + j] != doc_id[j] {
+                            dsame = 0
+                            break
+                        }
+                        j += 1
+                    }
+                    if dsame == 1 {
+                        return field_digits(text, ds + dn + 1, le)
+                    }
+                }
+            }
+        }
+        pos = le + 1
     }
     0
 }
@@ -380,10 +468,12 @@ fn doc_score(index_dir: Str, doc_id: Str, query: Map<Str,Int>) -> Int {
 }
 
 # Rewrite every shard without that doc, returning the removed posting count.
-# (Byte scan per shard for the same unbounded-volume reason as scanning.)
+# (Byte scan per shard for the same unbounded-volume reason as scanning;
+# the doc field is matched in place and kept lines are copied byte-wise,
+# so the rewrite never slices lines out of the whole shard text.)
 fn remove_doc(index_dir: Str, doc_id: Str) -> Int {
     if doc_known(index_dir, doc_id) != 1 { return 0 }
-    let tab = "\t"
+    let dn = doc_id.len()
     let mut removed = 0
     let sc = shard_count()
     for s in 0..sc {
@@ -400,16 +490,37 @@ fn remove_doc(index_dir: Str, doc_id: Str) -> Int {
                     le += 1
                 }
                 if le > pos {
-                    let line = str_slice(text, pos, le - pos)
-                    let parts = line.split(tab)
+                    let mut t1 = pos
+                    while t1 < le {
+                        if text[t1] == 9 { break }
+                        t1 += 1
+                    }
                     let mut keep = 1
-                    if parts.len() == 3 and parts[1] == doc_id {
-                        keep = 0
-                        removed += 1
+                    if t1 < le {
+                        let ds = t1 + 1
+                        if ds + dn < le and text[ds + dn] == 9 {
+                            let mut j = 0
+                            let mut dsame = 1
+                            while j < dn {
+                                if text[ds + j] != doc_id[j] {
+                                    dsame = 0
+                                    break
+                                }
+                                j += 1
+                            }
+                            if dsame == 1 {
+                                keep = 0
+                                removed += 1
+                            }
+                        }
                     }
                     if keep == 1 {
-                        let ab7 = str_builder_append(b, line)
-                        let ab8 = str_builder_append(b, "\n")
+                        let mut ci = pos
+                        while ci < le {
+                            let cb = str_builder_push(b, text[ci])
+                            ci += 1
+                        }
+                        let nl = str_builder_push(b, 10)
                     }
                 }
                 pos = le + 1
@@ -419,6 +530,7 @@ fn remove_doc(index_dir: Str, doc_id: Str) -> Int {
         }
     }
     # Rewrite docs.txt preserving full `id<TAB>path` lines.
+    let tab = "\t"
     let docs_path = index_docs_path(index_dir)
     let docs_text = docs_path.read()
     let b2 = str_builder_new()

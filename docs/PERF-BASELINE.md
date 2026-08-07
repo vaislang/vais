@@ -113,3 +113,33 @@ heavies are shard-scan bound, not registry bound: similar issues one
 shard scan per query term (~95 for a 100-word source) and top walks
 every shard once — both honest O(data) paths, candidates for a later
 cycle if they matter in practice.
+
+## Read-path scale cycle (2026-08-08, arm64 macOS)
+
+The "shard-scan bound" costs above were not honest O(data): the runtime
+`__vais_str_slice` re-scans the whole source string per call for its
+bounds-trap contract, so every per-line slice loop was quadratic in the
+text size (isolation probe: `.lines()` over 3,000 registry rows cost
+283 ms; the same probe now runs 9 ms). Three changes landed together —
+builtin-internal `__vais_str_slice_raw` on both engines (user-level
+trap contract unchanged, core regenerated to the gen2 == gen3
+fixpoint), shell-sort desugars replacing the always-quadratic
+selection `sort_by(_desc)` and insertion `.sort()`, and vaisdb shard
+scanners matching posting fields in place with a single registry
+snapshot for search/similar. Same harness as above:
+
+| Operation | 200 docs | 1000 docs | 5x factor | 1000-doc speedup |
+| --- | --- | --- | --- | --- |
+| reindex cold | 311 ms | 1,632 ms | x5.2 | ~1x |
+| reindex warm (all skip) | 9 ms | 23 ms | x2.6 | x4.3 |
+| search term k=10 | 8 ms | 14 ms | x1.75 | x77 |
+| msearch 2 indexes | 7 ms | 17 ms | x2.4 | x24 |
+| phrase 2-word | 13 ms | 44 ms | x3.4 | x2.7 |
+| similar doc k=5 | 15 ms | 59 ms | x3.9 | x336 |
+| top k=10 | 574 ms | 2,948 ms | x5.1 | x3.4 |
+
+Every read path now scales linearly or better in docs. `top`'s
+remaining constant is the per-line str_builder cycle for the term key
+(~31 us/line over every posting); a reusable builder or a
+previous-term byte-compare cache are the candidates if index-wide term
+stats become hot in practice.
