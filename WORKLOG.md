@@ -1,5 +1,29 @@
 # Vais Worklog
 
+## 2026-08-04 (front 진단 정밀도 — map/list 테이블 fn-스코프)
+
+**2026-07-26m 후보 완결**: check_front_contract_text의 map_locals/
+map_types·list_locals/list_types가 병합 모듈 텍스트에서 파일 전체 누적
+되어, 한 함수의 `pos: Map<Str,Int>` 파라미터가 다른 함수의 무관한 Int
+`pos = pos + (1)`(+= desugar)에 map-대입 검사를 오발화(LOUD)하던 것을
+근본수정. `fn ` 행에서 두 테이블 리셋(front_fn_scope_reset,
+front_rebind_reset 패턴 미러) — fn 행 자신의 파라미터는 리셋 직후 등록
+되므로 순서 안전. 시그니처 테이블(map_fns/struct_names/callable_names)
+은 의도적으로 파일 스코프 유지. 검사 사본이 core/fixpoint_full에 없음
+확인(드라이버 단독).
+
+검증: HEAD로 별도 빌드한 pre-fix 드라이버로 오거부 재현 ↔ post-fix 42
+양방향 격리, 진짜 위반은 여전히 거부. 기존 픽스처 전수 감사 결과
+파일-스코프 의존 0건. map_shadow_name_cross_fn accept 픽스처 추가.
+front 333/direct/fixpoint-full/test.sh 409/parity native=409 실측/
+release GREEN. 541af7f3, 머지 f11ee3dd(레지스트리 배칭 5979c3f6과
+겹침 0, 머지 후 main 재검증 green). 이후 `at`/`counts` 개명 회피 불필요.
+
+트랩(신규): 새 워크트리에서 release 게이트 website 스텝이
+`vite: command not found`(127) — node_modules 부재 + 체크인된
+package-lock이 package.json과 비동기(pre-existing)라 npm ci 거부.
+lock 재동기화는 별도 정리 커밋으로 처리.
+
 ## 2026-07-26m (증분 재인덱스 — fs_mtime 승격 + vaisdb reindex)
 
 **fs_mtime(path) -> Int 승격**: Int-반환 1-인자 미러 클래스(native.c

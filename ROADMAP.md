@@ -22,7 +22,26 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-07-26m) — 증분 재인덱스: fs_mtime 승격 + vaisdb reindex
+## 직전 완료 (2026-08-04) — front 진단 정밀도: map/list 테이블 fn-스코프
+모드: 개별선택
+- [x] 1. 근본수정 ✅ 2026-08-04 — check_front_contract_text의 map_locals/
+      map_types·list_locals/list_types **파일 누적 → `fn ` 행 리셋**
+      (front_fn_scope_reset 신설, front_rebind_reset 패턴 미러). 시그니처
+      테이블(map_fns/struct_names/callable_names)은 파일 스코프 유지.
+      HEAD로 빌드한 pre-fix 드라이버 오거부 ↔ post-fix 42 양방향 격리
+      검증, 진짜 위반(로컬 `= 5`/자기-fn Map 파라미터 `= 3`)은 여전히
+      LOUD 거부.
+- [x] 2. 회귀 가드 ✅ — 기존 map/list accept·reject 픽스처 전수 감사
+      (파일-스코프 의존 0건, `let x: Map = call()`형 자체 등록 확인) +
+      map_shadow_name_cross_fn accept 픽스처(타 fn `pos: Map<Str,Int>`
+      파라미터 + main Int `pos` `+=` 루프, exit 42).
+- [x] 3. 검증·머지 ✅ — front 333/direct/fixpoint-full/test.sh 409/parity
+      native=409/release GREEN. 541af7f3 → main 머지 f11ee3dd(5979c3f6
+      레지스트리 배칭과 파일 겹침 0, 머지 후 main에서 front/test.sh/
+      parity 재검증 green). 워크트리·브랜치 정리 완결.
+진행률: 3/3 (100%) — **2026-07-26m 이후 개명 회피(`at`/`counts`) 불필요**
+
+## 직전 완료 (2026-07-26m) — 증분 재인덱스: fs_mtime 승격 + vaisdb reindex
 모드: 개별선택
 - [x] 1. fs_mtime 승격 ✅ 2026-07-26 — 미러 배선(native.c 18참조, 런타임
       2종, **core 무변경 적중**), e373 잠금(존재>0/미존재 0/재작성
@@ -66,10 +85,9 @@ This file tracks current work and completed gate-backed language surface.
 ### 후보 추가 (검색 스프린트 환류)
 - ~~fs_mtime(path) host API~~ (완결 2026-07-26m: 승격 + vaisdb reindex,
   e373).
-- 체커 Map-대입 검증의 로컬 테이블이 함수 경계를 누수(2026-07-26m 실측):
-  Result match 바인더명이 **타 함수**의 Map 로컬명과 같으면 lowering
-  산물(`name = flow.value`)이 "Map assignment requires..." LOUD 오거부.
-  회피 = 바인더 개명. 수요 시 체커 로컬 스코프를 함수 단위로 격리.
+- ~~체커 Map-대입 검증 로컬 테이블의 함수 경계 누수(2026-07-26m 실측, 회피=바인더 개명)~~
+  (완결 2026-08-04: `fn ` 행 리셋 근본수정 541af7f3, 머지 f11ee3dd,
+  map_shadow_name_cross_fn 픽스처 — 개명 회피 불필요).
 
 ## 직전 완료 (2026-07-26k) — VaisDB P4: 스케일 게이트 (제품 래더 종결)
 모드: 개별선택
