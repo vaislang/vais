@@ -22,7 +22,21 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-08c) — 잔여 후보 소탕: unknown-variable front + top 상수
+## 현재 작업 (2026-08-08d) — v1.2.0 릴리스 컷 + 도그푸딩 재개
+모드: 개별선택 (사용자 지시: 릴리스 컷 → 도그푸딩)
+- [x] 1. v1.2.0 컷 ✅ 2026-08-08 — VAIS_VERSION 1.1.0→1.2.0(참조는
+      --version 3사이트뿐), CHANGELOG Unreleased→v1.2.0 회전(v1.1.0 이후
+      38커밋: 읽기 경로 선형화 search x77·similar x336·top 합산 ~64배 /
+      크래시 일관성 fs_rename·temp-then-rename·dedup / 진단 2종 front
+      fn-스코프·unknown-variable / 셸소트 데수가 / vaisbox 13종).
+      release 게이트 GREEN 후 태그.
+- [ ] 2. 도그푸딩 재개 — repo 문서 검색 워크플로(docs/ 서브디렉토리 포함
+      +WORKLOG+ROADMAP 인덱싱). 예상 갭: ingest-dir/reindex flat-only
+      (fs_list_files) → 재귀 수요(vaisgrep -r 전례). AS-IS 실사용으로
+      갭 확증 후 구현.
+진행률: 1/2
+
+## 직전 완료 (2026-08-08c) — 잔여 후보 소탕: unknown-variable front + top 상수
 모드: 개별선택 (2026-08-08 두 사이클의 경유 발견 2건 종결)
 - [x] 1. top 상수 근본 진단 ✅ 2026-08-08 — 격리 프로브(스캔+field_copy만
       28ms/전샤드)로 빌더 가설 기각: **~31µs/라인의 정체 = totals Map

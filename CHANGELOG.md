@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.2.0 - 2026-08-08
+
 ### Added
 
 - Front unknown-variable check: a bare single-identifier argument of a

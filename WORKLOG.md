@@ -1,5 +1,17 @@
 # Vais Worklog
 
+## 2026-08-08d (v1.2.0 릴리스 컷)
+
+v1.1.0(2026-07-26) 이후 38커밋 회전: 읽기 경로 선형화(str_slice 2차
+근본수정 + 레지스트리 배칭 + 스캐너 in-place + per-shard 집계 — search
+x77/similar x336/top 합산 ~64배), 크래시 일관성(fs_rename 승격 +
+temp-then-rename + last-wins dedup + 불변 게이트 10), 진단 2종(front
+fn-스코프 map/list 테이블, unknown-variable), 셸소트 데수가, vaisbox
+13종 로스터, 벤치 하네스(bench-vaisdb-corpus). VAIS_VERSION 1.2.0
+(참조는 --version 3사이트뿐), CHANGELOG Unreleased→v1.2.0-2026-08-08
+회전. 릴리스 게이트 GREEN 확인 후 태그. 컷 커밋은 도그푸딩 재개
+변경과 분리(버전+문서만).
+
 ## 2026-08-08c (잔여 후보 소탕 — unknown-variable front + top Map 선형탐색)
 
 **top 상수의 정체가 뒤집힘.** 후보 등록 시점 추정(~31µs/라인 = str_builder
