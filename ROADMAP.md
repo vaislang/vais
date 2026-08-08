@@ -22,6 +22,23 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
+## 직전 완료 (2026-08-08h) — vaisdb-repo.sh 전체-repo 코퍼스 확장
+모드: 개별선택 (사용자 지시: 푸시 + 확장)
+- [x] 1. 푸시 ✅ 2026-08-08 — main(c5e75d88..ab4aaaf3, 오늘 8사이클) +
+      v1.2.0 태그 origin 반영.
+- [x] 2. 전체-repo 코퍼스 ✅ — docs/examples/scripts/tools/compiler/std
+      6트리 + 톱레벨 *.md를 build/repo-corpus에 cp -Rp 미러(mtime 보존
+      → 증분 skip 유지, 삭제는 fresh 미러+삭제싱크가 처리, .git/build/
+      website 미진입) 후 단일 -r 워크 — 충돌 없는 상대 id
+      (tools/vaisc_native, notes/WORKLOG). **553 docs/64,321 postings,
+      콜드 7.2s, 웜 0.33s** — 23k줄 fixpoint_full.vais도 per-shard 창
+      무난(창 아크 실증 2호).
+- [x] 3. 실사용 환류 ✅ — 문서형 쿼리("rename atomic") 정밀, 식별자
+      쿼리는 분리된 공통 토큰(str/at) OR-합산 홍수에 특이 문서가 묻힘
+      → **희귀-텀 가중(IDF-류) or 전-텀-필수(AND) 모드 후보 등록**
+      (exact 식별자는 vaisgrep 몫 유지).
+진행률: 3/3 (100%)
+
 ## 현재 작업 (2026-08-08g) — 환류 후보 3건: 토크나이저·similar 파티션·top 필터
 모드: 개별선택 (2026-08-08e/f 도그푸딩 환류 소탕)
 - [x] 1. 결합어 토크나이저 ✅ 2026-08-08 — is_word_byte(ASCII alnum +
@@ -91,6 +108,9 @@ release 전부 GREEN (커밋 a862d163)
 진행률: 2/2 (100%)
 
 ### 다음 후보 (2026-08-08 도그푸딩 환류)
+- 랭킹 특이성(2026-08-08h 실측): 토크나이저 분리 후 식별자 쿼리의 공통
+  토큰(str/at)이 OR-합산을 지배 — IDF-류 희귀-텀 가중 or AND 모드
+  (랭킹 의미론 재설계 동반, 555-doc 실코퍼스로 검증 가능).
 - ~~4096 맵 창(top + 워킹 노트 ingest)~~ (완결 2026-08-08f: 창 상향 대신
   샤드-파티션으로 창 요구 자체 제거 — 컴파일러 무변경).
 - ~~부분어/substring 검색(결합어 미검색)~~ (완결 2026-08-08g: is_word_byte

@@ -1,5 +1,20 @@
 # Vais Worklog
 
+## 2026-08-08h (vaisdb-repo.sh 전체-repo 코퍼스 + 오늘 8사이클 푸시)
+
+main(오늘 8사이클 11커밋) + v1.2.0 태그 origin 푸시. vaisdb-repo.sh를
+전체-repo 검색기로 확장: 6트리(docs/examples/scripts/tools/compiler/
+std) + 톱레벨 *.md를 build/repo-corpus에 **cp -Rp 미러**(mtime 보존이
+핵심 — 증분 skip 유지; fresh 미러 + 삭제싱크로 소스 삭제 반영; .git/
+build/website 미진입) 후 단일 `-r` 워크로 충돌 없는 상대 id. **553
+docs/64,321 postings, 콜드 7.2s, 웜 0.33s** — 23k줄 fixpoint_full도
+per-shard 창 무난(창 아크 실증 2호).
+
+실사용 환류: 문서형 쿼리("rename atomic" → 게이트/드라이버/e391 정확)
+는 좋고, 식별자 쿼리(token_shard_at)는 분리된 공통 토큰(str/at)의
+OR-합산이 특이 문서를 묻음 — **IDF-류 희귀-텀 가중 or AND 모드** 후보
+등록(exact 식별자 검색은 vaisgrep 몫 유지).
+
 ## 2026-08-08g (환류 후보 3건 — 토크나이저 분리·similar 파티션·top -min)
 
 **토크나이저**: 단어 = ASCII alnum + 바이트≥128의 최대 런(is_word_byte

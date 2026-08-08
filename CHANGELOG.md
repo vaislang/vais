@@ -4,6 +4,16 @@
 
 ### Changed
 
+- `scripts/vaisdb-repo.sh` now searches the whole repository: six
+  source trees plus the top-level notes mirror into one staging corpus
+  (mtime-preserving copies keep the incremental skip; .git, build, and
+  website never enter) and a single recursive walk yields
+  collision-free relative doc ids. 553 documents / 64,321 postings
+  index cold in ~7 s and reindex warm in ~0.3 s. Recorded demand from
+  using it: identifier queries drown in the OR-sum of their common
+  split tokens, filing rare-term weighting or an all-terms mode as the
+  next ranking candidate.
+
 - Search tokenization now splits on every non-word ASCII byte: a word
   is a maximal run of ASCII alphanumerics and bytes >= 128 (UTF-8
   sequences stay whole, so multibyte text is untouched), and ingest and
