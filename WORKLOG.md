@@ -1,5 +1,28 @@
 # Vais Worklog
 
+## 2026-08-08g (환류 후보 3건 — 토크나이저 분리·similar 파티션·top -min)
+
+**토크나이저**: 단어 = ASCII alnum + 바이트≥128의 최대 런(is_word_byte
+단일원천 — ingest와 쿼리가 같은 술어를 공유해야 하며 비대칭=검색 실패).
+하이픈/언더스코어/닷/마크다운 문장부호 전부 분리, 한국어(≥128) 무손상,
+phrase는 소스-텍스트 화이트스페이스 계약 유지. repo 실사용: `fixpoint`
+검색이 1건 → 4문서(ROADMAP=58 — `fixpoint_full.vais` 내부까지 매칭).
+**토크나이저 변경 = 인덱스 재구축 필요**: vaisdb-repo.sh가 dist 재빌드
+시 인덱스를 리셋하도록 결합, CHANGELOG 명시.
+
+**similar**: similar_scores_into per-shard 쿼리 파티션(ingest 파티션
+재사용) + ranked_docs_from_scores_into — whole-doc 쿼리 맵 소멸,
+5001-어휘 소스가 -2 대신 정상 랭킹(게이트 big2=501 잠금).
+
+**top -min**: 언어 종속 stopword 목록은 의미론상 기각(한국어/코드
+코퍼스에 부정확), 명시적 `-min <bytes>` 바이트 길이 필터 채택 —
+distinct 카운트 연동, 불용어는 사용자측 `| grep` 문서화.
+
+계약 잠금: self-test 81~83(분리 카운트) + 워크플로 +7(인덱스/쿼리 분리
+대칭, 빅 소스 similar, -min exit/출력). 트랩: **파이프 마지막 grep의
+exit를 명령 exit로 오인**(similar 기대 1→0 정정, top -min은 무파이프
+exit 검증) — 내용 어서션은 기대 0, 카운트형 exit는 파이프 없이.
+
 ## 2026-08-08f (4096 창 아크 — 샤드-파티션으로 창 요구 제거)
 
 **설계 결정: 창 상향 기각, 파티션 활용.** 맵 계약 상향은 전 맵 메모리

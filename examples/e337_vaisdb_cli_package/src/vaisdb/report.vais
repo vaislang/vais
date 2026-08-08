@@ -49,6 +49,18 @@ fn ranked_docs_into(index_dir: Str, query: Map<Str,Int>, out: List<RankedDoc>) -
     count
 }
 
+# Rank registry docs against an already-built scores map (the similar
+# path fills scores per shard, so no whole-document query map exists).
+fn ranked_docs_from_scores_into(index_dir: Str, scores: Map<Str,Int>, out: List<RankedDoc>) -> Int {
+    let ids: List<Str> = []
+    let count = docs_list_into(index_dir, ids)
+    for doc_id in ids {
+        out.push(RankedDoc { doc_id: doc_id, score: scores.get(doc_id, 0) })
+    }
+    out.sort_by_desc(|d| d.score)
+    count
+}
+
 fn rank_lines(index_dir: Str, query: Map<Str,Int>, k: Int) -> Str {
     let ranked: List<RankedDoc> = []
     let count = ranked_docs_into(index_dir, query, ranked)

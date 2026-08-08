@@ -336,7 +336,7 @@ fn run_phrase(index_dir: Str, phrase_text: Str, k: Int) -> Int {
 # k-best, then one final sort). The whole-index vocabulary can exceed
 # the 4096 map window freely; only a single shard's vocabulary is
 # windowed.
-fn run_top(index_dir: Str, k: Int) -> Int {
+fn run_top(index_dir: Str, k: Int, min_len: Int) -> Int {
     if index_exists(index_dir) != 1 {
         print("error: index not found")
         return 3
@@ -364,7 +364,9 @@ fn run_top(index_dir: Str, k: Int) -> Int {
         for i in 0..tn {
             let term = totals.key_at(i)
             let tv = totals.value_at(i)
-            if rows.len() < kk {
+            if term.len() < min_len {
+                distinct -= 1
+            } else if rows.len() < kk {
                 rows.push(TermRow { term: term, total: tv })
             } else {
                 let mut mi = 0
@@ -431,8 +433,11 @@ fn run_similar(index_dir: Str, doc_id: Str, k: Int) -> Int {
         print("error: source file missing")
         return 3
     }
-    let query: Map<Str,Int> = {}
-    let total = doc_terms_guarded_into(full.read(), query)
+    # Per-shard query partition: the source body never builds one
+    # whole-document term map, so big-vocabulary sources similar-score
+    # instead of erroring (the -2 branch guards the per-shard boundary).
+    let scores: Map<Str,Int> = {}
+    let total = similar_scores_into(index_dir, full.read(), scores)
     if total == 0 - 2 {
         print("error: source too large")
         return 1
@@ -442,7 +447,7 @@ fn run_similar(index_dir: Str, doc_id: Str, k: Int) -> Int {
         return 1
     }
     let ranked: List<RankedDoc> = []
-    ranked_docs_into(index_dir, query, ranked)
+    ranked_docs_from_scores_into(index_dir, scores, ranked)
     let others: List<RankedDoc> = []
     for hit in ranked {
         if hit.doc_id != doc_id and hit.score > 0 {
@@ -564,7 +569,7 @@ fn usage() -> Int {
     print("       vaisdb reindex <index> <doc-dir> [-r]")
     print("       vaisdb why <index> <query> <doc-id>")
     print("       vaisdb similar <index> <doc-id> [k]")
-    print("       vaisdb top <index> [k]")
+    print("       vaisdb top <index> [k] [-min <bytes>]")
     print("       vaisdb phrase <index> <phrase-text> [k]")
     print("       vaisdb rank <index> <query-text> <k>")
     print("       vaisdb search <index> <query-text> [k]")
@@ -709,6 +714,15 @@ fn self_test() -> Int {
     if doc_terms_guarded_into("ai ai ai cache", eq) != 4 { return 25 }
     if eq.get("ai", 0) != 3 { return 26 }
 
+    # Compound tokens split on every non-word ASCII byte for indexing
+    # and queries alike (single is_word_byte source), so hyphen, dot,
+    # and underscore compounds match their parts; bytes >= 128 stay
+    # word bytes, keeping multibyte text whole.
+    let ct: Map<Str,Int> = {}
+    if doc_terms_guarded_into("test-fixpoint-full fixpoint_full.vais", ct) != 6 { return 81 }
+    if ct.get("fixpoint", 0) != 2 { return 82 }
+    if ct.get("vais", 0) != 1 { return 83 }
+
     # The whole-document counter still reports -2 past the 4096 window
     # (query and similar sources keep that guard), but ingest tokenizes
     # per shard, so the same 4100-distinct-term document now indexes —
@@ -831,8 +845,10 @@ fn main() -> Int {
         return usage()
     }
     if command == "top" {
-        if proc_argc() == 2 { return run_top(proc_arg(1), 10) }
-        if proc_argc() == 3 { return run_top(proc_arg(1), parse_int(proc_arg(2))) }
+        if proc_argc() == 2 { return run_top(proc_arg(1), 10, 0) }
+        if proc_argc() == 3 { return run_top(proc_arg(1), parse_int(proc_arg(2)), 0) }
+        if proc_argc() == 4 and proc_arg(2) == "-min" { return run_top(proc_arg(1), 10, parse_int(proc_arg(3))) }
+        if proc_argc() == 5 and proc_arg(3) == "-min" { return run_top(proc_arg(1), parse_int(proc_arg(2)), parse_int(proc_arg(4))) }
         return usage()
     }
     if command == "similar" {

@@ -4,6 +4,29 @@
 
 ### Changed
 
+- Search tokenization now splits on every non-word ASCII byte: a word
+  is a maximal run of ASCII alphanumerics and bytes >= 128 (UTF-8
+  sequences stay whole, so multibyte text is untouched), and ingest and
+  query share the single `is_word_byte` source so indexed terms and
+  query terms can never split apart. Hyphen/underscore/dot compounds
+  and markdown punctuation all separate — a `fixpoint` query now
+  matches `test-fixpoint-full` and `fixpoint_full.vais`, taking the
+  repo-docs dogfood from one hit to every design document. `phrase`
+  deliberately keeps its whitespace source-text semantics. **A
+  tokenizer change means existing indexes need a rebuild** (reset or
+  re-create; `scripts/vaisdb-repo.sh` drops its index whenever it
+  rebuilds the binary).
+
+- `similar` builds its query per shard (the ingest partition) instead
+  of one whole-document term map, so big-vocabulary sources
+  more-like-this instead of erroring "source too large"; the -2 guard
+  remains at the per-shard boundary.
+
+- `top` accepts `[-min <bytes>]` to drop terms shorter than the given
+  byte length — an explicit, language-neutral filter; stopword lists
+  stay user-side (`| grep -vw ...`) by design. Locked with the
+  tokenizer and big-source cases in the workflow gate.
+
 - Removed the 4096-window ceilings from vaisdb ingest and top by
   exploiting the term-hash partition invariant (every term's postings
   live in exactly one shard) instead of raising the map contract:

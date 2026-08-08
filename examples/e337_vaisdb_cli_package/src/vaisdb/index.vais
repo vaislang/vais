@@ -158,26 +158,40 @@ fn doc_known(index_dir: Str, doc_id: Str) -> Int {
     0
 }
 
-# Streaming word counter with a capacity window: byte-scans whitespace-run
-# tokenization (matching doc_term_counts_into) but guards the map before
-# every fresh insert, so a document whose vocabulary exceeds the 4096 map
-# window reports -2 instead of trapping the whole process.
+# Search tokenization: a word is a maximal run of ASCII alphanumerics
+# and bytes >= 128 (UTF-8 sequences — Korean text stays whole), so
+# hyphen/underscore/dot compounds and markdown punctuation split
+# (`test-fixpoint-full` indexes as test/fixpoint/full and a query for
+# `fixpoint` hits it). Ingest and query MUST share this predicate —
+# an asymmetric split would make indexed terms unreachable. `phrase`
+# deliberately keeps its separate whitespace source-text semantics.
+fn is_word_byte(c: Int) -> Int {
+    if c >= 48 and c <= 57 { return 1 }
+    if c >= 65 and c <= 90 { return 1 }
+    if c >= 97 and c <= 122 { return 1 }
+    if c >= 128 { return 1 }
+    0
+}
+
+# Streaming word counter with a capacity window: byte-scans word-run
+# tokenization (is_word_byte) and guards the map before every fresh
+# insert, so a text whose vocabulary exceeds the 4096 map window
+# reports -2 instead of trapping the whole process. Query text and
+# similar sources keep this whole-text window; ingest runs per shard.
 fn doc_terms_guarded_into(body: Str, counts: Map<Str,Int>) -> Int {
     let n = body.len()
     let mut pos = 0
     let mut total = 0
     while pos < n {
-        let b0 = body[pos]
-        if b0 == 32 or b0 == 9 or b0 == 10 or b0 == 13 {
+        if is_word_byte(body[pos]) == 0 {
             pos += 1
         } else {
             let start = pos
             while pos < n {
-                let b1 = body[pos]
-                if b1 == 32 or b1 == 9 or b1 == 10 or b1 == 13 { break }
+                if is_word_byte(body[pos]) == 0 { break }
                 pos += 1
             }
-            let word = str_slice(body, start, pos - start)
+            let word = field_copy(body, start, pos)
             if counts.contains(word) {
                 let prev = counts.get(word, 0)
                 counts.insert(word, prev + 1)
@@ -204,14 +218,12 @@ fn doc_terms_shard_into(body: Str, shard: Int, counts: Map<Str,Int>) -> Int {
     let mut pos = 0
     let mut total = 0
     while pos < n {
-        let b0 = body[pos]
-        if b0 == 32 or b0 == 9 or b0 == 10 or b0 == 13 {
+        if is_word_byte(body[pos]) == 0 {
             pos += 1
         } else {
             let start = pos
             while pos < n {
-                let b1 = body[pos]
-                if b1 == 32 or b1 == 9 or b1 == 10 or b1 == 13 { break }
+                if is_word_byte(body[pos]) == 0 { break }
                 pos += 1
             }
             if token_shard_at(body, start, pos) == shard {
@@ -391,6 +403,27 @@ fn query_scores_into(index_dir: Str, query: Map<Str,Int>, scores: Map<Str,Int>) 
         scan_term_scores(index_dir, term, weight, scores)
     }
     scores.len()
+}
+
+# More-like-this scoring for one source body without a whole-document
+# query map: tokens count per shard (the ingest partition) and each
+# shard's terms scan their own postings, so a source document of any
+# practical vocabulary similar-scores inside the per-shard window.
+fn similar_scores_into(index_dir: Str, body: Str, scores: Map<Str,Int>) -> Int {
+    let counts: Map<Str,Int> = {}
+    let mut total = 0
+    let sc = shard_count()
+    for s in 0..sc {
+        counts.clear()
+        let st = doc_terms_shard_into(body, s, counts)
+        if st < 0 { return 0 - 2 }
+        total += st
+        let cn = counts.len()
+        for i in 0..cn {
+            let hits = scan_term_scores(index_dir, counts.key_at(i), counts.value_at(i), scores)
+        }
+    }
+    total
 }
 
 # Whitespace-run normalization for phrase matching: every run of spaces,

@@ -632,6 +632,30 @@ expect_exit "vaisdb recursive deletion sync reaches subdirs" 0 /bin/sh -c "'$vdb
 expect_exit "vaisdb recursive removed subdir doc leaves search" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$recur_idx' delta 2 | cmp -s - /dev/null"
 expect_exit "vaisdb recursive ingest-dir walks subdirs" 0 /bin/sh -c "rm -rf '$tmp/vaisdb-recur-ing'; '$vdb_dist/bin/vaisdb' ingest-dir '$tmp/vaisdb-recur-ing' '$recur_docs' -r | grep -qx 'ingested 2 documents'"
 expect_exit "vaisdb reindex rejects unknown flag" 1 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$recur_idx' '$recur_docs' -x >/dev/null 2>&1"
+
+# Search tokenization splits compounds on non-word ASCII bytes for
+# index and query alike, similar sources partition per shard past the
+# whole-document window, and top's -min filter drops short terms
+# explicitly (stopword filtering stays user-side).
+tok_docs="$tmp/vaisdb-tok-docs"
+tok_idx="$tmp/vaisdb-tok-idx"
+rm -rf "$tok_docs" "$tok_idx"
+mkdir -p "$tok_docs"
+printf 'the test-fixpoint-full gate uses fixpoint_full.vais here\n' > "$tok_docs/tok.txt"
+expect_exit "vaisdb tokenizer index builds" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$tok_idx' '$tok_docs' | grep -qx 'reindexed added=1 updated=0 removed=0 skipped=0'"
+expect_exit "vaisdb tokenizer splits indexed compounds" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$tok_idx' fixpoint 2 | grep -q '^1\. tok=2 '"
+expect_exit "vaisdb tokenizer splits query compounds" 6 /bin/sh -c "'$vdb_dist/bin/vaisdb' query '$tok_idx' tok 'test-fixpoint-full.vais' >/dev/null"
+simbig_docs="$tmp/vaisdb-simbig-docs"
+simbig_idx="$tmp/vaisdb-simbig-idx"
+rm -rf "$simbig_docs" "$simbig_idx"
+mkdir -p "$simbig_docs"
+seq -s ' ' 0 4500 > "$simbig_docs/big.txt"
+seq -s ' ' 4000 8500 > "$simbig_docs/big2.txt"
+printf 'zeta only\n' > "$simbig_docs/small.txt"
+expect_exit "vaisdb similar big-source index builds" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' ingest-dir '$simbig_idx' '$simbig_docs' | grep -qx 'ingested 3 documents'"
+expect_exit "vaisdb similar handles big-vocab sources" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' similar '$simbig_idx' big 2 | grep -q '^1\. big2=501'"
+expect_exit "vaisdb top -min filters short terms" 3 /bin/sh -c "'$vdb_dist/bin/vaisdb' top '$simbig_idx' 3 -min 4 >/dev/null"
+expect_exit "vaisdb top -min output excludes short terms" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' top '$simbig_idx' 3 -min 4 | grep -q '^[0-9]\. [0-9]\{1,3\}=' && exit 1; exit 0"
 rm "$reindex_docs/r2.txt"
 expect_exit "vaisdb reindex removes deleted docs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=0 removed=1 skipped=1'"
 expect_exit "vaisdb reindex removed doc leaves search" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$reindex_idx' gamma 2 | cmp -s - /dev/null"

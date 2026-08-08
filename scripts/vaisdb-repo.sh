@@ -20,6 +20,9 @@ NOTES="$HERE/build/repo-docs-notes"
 
 if [ ! -x "$DIST/bin/vaisdb" ] || [ "$HERE/examples/e337_vaisdb_cli_package/src/main.vais" -nt "$DIST/bin/vaisdb" ] || [ "$HERE/examples/e337_vaisdb_cli_package/src/vaisdb/index.vais" -nt "$DIST/bin/vaisdb" ]; then
     "$HERE/scripts/vaisc" package "$HERE/examples/e337_vaisdb_cli_package" -o "$DIST" >/dev/null
+    # A rebuilt binary may carry tokenizer or format changes; drop the
+    # index so the next reindex rebuilds it under the current contract.
+    rm -rf "$IDX"
 fi
 VDB="$DIST/bin/vaisdb"
 

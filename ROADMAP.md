@@ -22,7 +22,26 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-08f) — 4096 창 아크: 샤드-파티션으로 창 요구 제거
+## 현재 작업 (2026-08-08g) — 환류 후보 3건: 토크나이저·similar 파티션·top 필터
+모드: 개별선택 (2026-08-08e/f 도그푸딩 환류 소탕)
+- [x] 1. 결합어 토크나이저 ✅ 2026-08-08 — is_word_byte(ASCII alnum +
+      ≥128) 단일원천, ingest/쿼리 동일 술어. repo 실사용: `fixpoint`
+      검색 1건 → 4문서(ROADMAP=58, 결합어 내부 매칭). 한국어 무손상,
+      phrase는 별도 계약 유지. **기존 인덱스 재구축 필요** — CHANGELOG
+      명시 + vaisdb-repo.sh dist-재빌드 시 인덱스 리셋 결합.
+- [x] 2. similar per-shard 쿼리 파티션 ✅ — similar_scores_into +
+      ranked_docs_from_scores_into. 5001-어휘 소스 정상(-2 소멸, 게이트
+      big2=501 잠금).
+- [x] 3. top `-min <bytes>` ✅ — 명시적 바이트 길이 필터(distinct
+      카운트 연동), stopword는 사용자측 grep 문서화.
+- [x] 4. 게이트+환류 ✅ — self-test 81~83(토크나이저 분리) + 워크플로
+      +7 케이스(토크나이저 인덱스/쿼리 대칭·similar 빅 소스·-min 필터/
+      출력). 트랩: 파이프 마지막 grep의 exit를 명령 exit로 오인 2회 —
+      내용 어서션은 기대 0, 카운트 exit는 무파이프로.
+진행률: 4/4 (100%) — 게이트: fmt/front/test.sh 410/parity 410/scale/
+release 전부 GREEN. **도그푸딩 환류 후보 전량 소탕, 수요 대기.**
+
+## 직전 완료 (2026-08-08f) — 4096 창 아크: 샤드-파티션으로 창 요구 제거
 모드: 개별선택 (도그푸딩 실수요 2건: repo top "vocabulary too large" +
 워킹 노트 per-doc 어휘 초과 skip)
 설계 결정: **창 상향(컴파일러) 대신 term-해시 파티션 불변식 활용** — 한
@@ -74,12 +93,11 @@ release 전부 GREEN (커밋 a862d163)
 ### 다음 후보 (2026-08-08 도그푸딩 환류)
 - ~~4096 맵 창(top + 워킹 노트 ingest)~~ (완결 2026-08-08f: 창 상향 대신
   샤드-파티션으로 창 요구 자체 제거 — 컴파일러 무변경).
-- 부분어/substring 검색: exact-token 한계로 결합어 미검색. 토큰화 확장
-  (하이픈/언더스코어 분리) or substring 폴백 — 랭킹 의미론 재검토 동반.
-- similar 대형 소스 문서: 쿼리 맵이 whole-doc 창(-2 유지). 수요 시
-  ingest와 같은 per-shard 쿼리 파티션 적용 가능(잔여 알려진 한계).
-- repo top 상위가 불용어(and/the/-): 실사용감 개선용 stopword/최소길이
-  필터 후보(랭킹 의미론 판단 동반).
+- ~~부분어/substring 검색(결합어 미검색)~~ (완결 2026-08-08g: is_word_byte
+  토크나이저 — 비단어 ASCII 전체 분리, ingest/쿼리 단일원천).
+- ~~similar 대형 소스 -2~~ (완결 2026-08-08g: per-shard 쿼리 파티션).
+- ~~top 불용어/최소길이~~ (완결 2026-08-08g: 명시적 `-min <bytes>` —
+  언어 종속 stopword 목록은 의미론상 기각, 사용자측 grep 문서화).
 
 ## 직전 완료 (2026-08-08c) — 잔여 후보 소탕: unknown-variable front + top 상수
 모드: 개별선택 (2026-08-08 두 사이클의 경유 발견 2건 종결)
