@@ -41,7 +41,7 @@ if [ "$rank_score" -ne 2 ]; then
     echo "FAIL: expected top score 2, got $rank_score"
     exit 1
 fi
-if [ "$stats_out" != "docs=60 terms=12180" ]; then
+if [ "$stats_out" != "docs=60 postings=12180" ]; then
     echo "FAIL: unexpected stats: $stats_out"
     exit 1
 fi

@@ -1,5 +1,34 @@
 # Vais Worklog
 
+## 2026-08-08f (4096 창 아크 — 샤드-파티션으로 창 요구 제거)
+
+**설계 결정: 창 상향 기각, 파티션 활용.** 맵 계약 상향은 전 맵 메모리
+64배 + 선형탐색 악화라 기각(해시맵 런타임은 별도 대형 아크). 대신
+term-해시 파티션 불변식(한 term의 포스팅은 자기 샤드에만)을 써서 창
+요구를 per-shard(~어휘/64)로 낮춤 — 4096 창 안에서 ~26만 어휘까지,
+컴파일러 무변경.
+
+**ingest**: doc_terms_shard_into가 샤드 패스마다 in-place 바이트 해시
+(token_shard_at — term_shard가 여기 위임, 해시 드리프트=포스팅 실종
+차단)로 소속 판정, 소속 단어만 field_copy(checked str_slice의
+O(position) 회피 부수효과). per-doc 창 → per-doc-per-shard. 4100-어휘
+문서가 skip 대신 ingest+검색. cold reindex +7%(1,632→1,745ms, 64-패스
+실비용). **top**: shard_totals_into(단일 샤드) + run_top k-best fold
+(min-replace, k clamp 4095) — 전역 어휘 맵 소멸, 1000-doc 출력 동일
+(동률 경계 순서 교환만), 5001-어휘 인덱스 정상.
+
+계약 갱신: self-test 22~24(대형 문서 이제 성공 + 스코어 검증 79/80),
+워크플로 big-vocab 4케이스(구 oversized 3케이스 대체), stats
+`terms=`→`postings=`(실체 정정, 그렙 4곳 동기화). 실사용: 워킹 노트
+3종 재편입(WORKLOG가 fixpoint 검색 1위), repo top 동작(16 docs/30,710
+postings — 상위 불용어는 후보 등록). similar 대형 소스 -2는 잔여 한계
+로 문서화.
+
+트랩 2건: ① 게이트 exit 기대값은 8비트(4201 기대 → 4095 clamp →
+255) — 카운트형 exit은 작은 k로 검증. ② fs_temp_dir 스크래치의 구
+포맷 인덱스 잔재가 self-test를 로컬에서만 2로 만들었음 — 게이트 fresh
+환경(42)이 정답 기준, 로컬 스크래치 exit 신뢰 금지.
+
 ## 2026-08-08e (도그푸딩 재개 — vaisdb 재귀 인덱싱 + repo 검색 워크플로)
 
 **flat 갭 라이브 확증 → 즉시 구현.** docs/는 13개 중 11개가 서브

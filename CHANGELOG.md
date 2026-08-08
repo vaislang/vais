@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Changed
+
+- Removed the 4096-window ceilings from vaisdb ingest and top by
+  exploiting the term-hash partition invariant (every term's postings
+  live in exactly one shard) instead of raising the map contract:
+  ingest now tokenizes once per shard with an in-place byte hash
+  (`token_shard_at`, the single hash source `term_shard` delegates to,
+  so a body scan and an allocated term can never route apart) and only
+  copies the words owned by that shard, making a document's window its
+  per-shard vocabulary (~1/64 — a 4,100-distinct-term document that
+  previously skipped as too large now indexes and searches); `top`
+  folds per-shard totals through a running k-best list instead of one
+  index-wide map, so whole-index vocabulary is unbounded while only a
+  single shard's vocabulary stays windowed. Cold reindex pays ~7% for
+  the per-shard passes (1,632 -> 1,745 ms at 1,000 docs); equal-total
+  ties at the k boundary may order differently than before. The
+  whole-document counter keeps its -2 guard for query text and
+  `similar` sources (documented limit), `stats` now labels its second
+  figure `postings=` (it always counted posting lines, not distinct
+  terms), and the workflow gate's oversized-document cases flipped to
+  the new contract (big-vocabulary documents ingest, search, and `top`
+  works past 4,096 distinct terms). Dogfooded live: the repo working
+  notes (WORKLOG/ROADMAP/CHANGELOG) index and search through
+  `scripts/vaisdb-repo.sh`, and repo-corpus `top` runs where it
+  previously errored "vocabulary too large".
+
 ### Added
 
 - vaisdb `ingest-dir` and `reindex` accept a trailing `-r` to walk

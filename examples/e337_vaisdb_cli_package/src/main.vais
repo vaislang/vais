@@ -330,6 +330,12 @@ fn run_phrase(index_dir: Str, phrase_text: Str, k: Int) -> Int {
 # Index-wide top terms: aggregate posting counts across every shard and
 # print the k most frequent as `N. term=count` rows (default k = 10);
 # the exit code is the number of rows shown.
+# Index-wide term frequencies without an index-wide map: every term's
+# postings live in one hash shard, so per-shard totals are complete and
+# the k best rows fold across shards (min-replace against the current
+# k-best, then one final sort). The whole-index vocabulary can exceed
+# the 4096 map window freely; only a single shard's vocabulary is
+# windowed.
 fn run_top(index_dir: Str, k: Int) -> Int {
     if index_exists(index_dir) != 1 {
         print("error: index not found")
@@ -339,24 +345,50 @@ fn run_top(index_dir: Str, k: Int) -> Int {
         print("error: top count must be positive")
         return 1
     }
+    # Keep the k-best list inside the 4095 list contract.
+    let mut kk = k
+    if kk > 4095 { kk = 4095 }
+    let rows: List<TermRow> = []
     let totals: Map<Str,Int> = {}
-    let distinct = term_totals_into(index_dir, totals)
-    if distinct == 0 - 2 {
-        print("error: vocabulary too large")
-        return 1
+    let mut distinct = 0
+    let sc = shard_count()
+    for s in 0..sc {
+        totals.clear()
+        let dn = shard_totals_into(index_dir, s, totals)
+        if dn == 0 - 2 {
+            print("error: vocabulary too large")
+            return 1
+        }
+        distinct += dn
+        let tn = totals.len()
+        for i in 0..tn {
+            let term = totals.key_at(i)
+            let tv = totals.value_at(i)
+            if rows.len() < kk {
+                rows.push(TermRow { term: term, total: tv })
+            } else {
+                let mut mi = 0
+                let mut mv = rows[0].total
+                for j in 0..rows.len() {
+                    let cand = rows[j]
+                    if cand.total < mv {
+                        mv = cand.total
+                        mi = j
+                    }
+                }
+                if tv > mv {
+                    rows[mi] = TermRow { term: term, total: tv }
+                }
+            }
+        }
     }
     if distinct == 0 {
         print("error: index has no postings")
         return 3
     }
-    let rows: List<TermRow> = []
-    let tn = totals.len()
-    for i in 0..tn {
-        rows.push(TermRow { term: totals.key_at(i), total: totals.value_at(i) })
-    }
     rows.sort_by_desc(|r| r.total)
     let mut shown = 0
-    for row in rows.take(k) {
+    for row in rows.take(kk) {
         shown += 1
         print(f"{shown}. {row.term}={row.total}")
     }
@@ -520,7 +552,7 @@ fn run_stats(index_dir: Str) -> Int {
     }
     let ids: List<Str> = []
     let docs = docs_list_into(index_dir, ids)
-    print(f"docs={docs} terms={postings_count(index_dir)}")
+    print(f"docs={docs} postings={postings_count(index_dir)}")
     return docs
 }
 
@@ -677,8 +709,11 @@ fn self_test() -> Int {
     if doc_terms_guarded_into("ai ai ai cache", eq) != 4 { return 25 }
     if eq.get("ai", 0) != 3 { return 26 }
 
-    # A vocabulary past the 4096 window reports -2 and leaves the index
-    # untouched instead of trapping the process.
+    # The whole-document counter still reports -2 past the 4096 window
+    # (query and similar sources keep that guard), but ingest tokenizes
+    # per shard, so the same 4100-distinct-term document now indexes —
+    # its window is the per-shard vocabulary (~1/64) — and its terms
+    # score like any other doc.
     let bb = str_builder_new()
     let mut w = 0
     while w < 4100 {
@@ -689,9 +724,12 @@ fn self_test() -> Int {
     let big = str_builder_finish(bb)
     let probe: Map<Str,Int> = {}
     if doc_terms_guarded_into(big, probe) != 0 - 2 { return 22 }
-    if ingest_doc(dir, "huge", big, "-") != 0 - 2 { return 23 }
+    if ingest_doc(dir, "huge", big, "-") != 4100 { return 23 }
     let ids3: List<Str> = []
-    if docs_list_into(dir, ids3) != 2 { return 24 }
+    if docs_list_into(dir, ids3) != 3 { return 24 }
+    let hq: Map<Str,Int> = {}
+    if doc_terms_guarded_into("4099", hq) != 1 { return 79 }
+    if doc_score(dir, "huge", hq) != 1 { return 80 }
 
     # Cross-index merge: hits from different indexes sort by score while
     # keeping their `<index>/<doc>` labels and source paths.
@@ -725,11 +763,25 @@ fn self_test() -> Int {
     if s_ranked[1].doc_id != "s2" { return 64 }
     if s_ranked[1].score != 2 { return 65 }
 
-    # Index-wide term totals aggregate live postings across shards.
-    let t_totals: Map<Str,Int> = {}
-    if term_totals_into(sidx, t_totals) != 4 { return 66 }
-    if t_totals.get("alpha", 0) != 2 { return 67 }
-    if t_totals.get("zeta", 0) != 1 { return 68 }
+    # Per-shard totals partition the vocabulary: summing every shard's
+    # distinct count and folding its entries reconstructs the exact
+    # index-wide totals without one index-wide map.
+    let t_shard: Map<Str,Int> = {}
+    let mut t_distinct = 0
+    let mut t_alpha = 0
+    let mut t_zeta = 0
+    let t_sc = shard_count()
+    for ts in 0..t_sc {
+        t_shard.clear()
+        let t_dn = shard_totals_into(sidx, ts, t_shard)
+        if t_dn < 0 { return 66 }
+        t_distinct += t_dn
+        t_alpha += t_shard.get("alpha", 0)
+        t_zeta += t_shard.get("zeta", 0)
+    }
+    if t_distinct != 4 { return 66 }
+    if t_alpha != 2 { return 67 }
+    if t_zeta != 1 { return 68 }
 
     # Phrase matching: token boundaries, whitespace normalization across
     # line breaks, and non-overlapping counts.

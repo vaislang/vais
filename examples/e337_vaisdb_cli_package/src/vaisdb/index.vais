@@ -23,13 +23,22 @@ fn shard_count() -> Int {
     64
 }
 
-fn term_shard(term: Str) -> Int {
-    let n = term.len()
+# Single hash source for shard routing: the Str spelling delegates to
+# the byte-range form, so an in-place body scan and an allocated term
+# can never drift to different shards (drift would make postings
+# invisible to every reader).
+fn token_shard_at(text: Str, start: Int, end: Int) -> Int {
     let mut h = 0
-    for i in 0..n {
-        h = (h * 31 + term[i]) % 100003
+    let mut i = start
+    while i < end {
+        h = (h * 31 + text[i]) % 100003
+        i += 1
     }
     h % shard_count()
+}
+
+fn term_shard(term: Str) -> Int {
+    token_shard_at(term, 0, term.len())
 }
 
 fn index_docs_path(index_dir: Str) -> Str {
@@ -182,33 +191,78 @@ fn doc_terms_guarded_into(body: Str, counts: Map<Str,Int>) -> Int {
     total
 }
 
+# Shard-filtered word counter: tokens hash in place (token_shard_at)
+# and only the words routed to `shard` are copied out and counted, so
+# one document's map window is its per-shard vocabulary (~1/64 of the
+# document) instead of its whole vocabulary — the 4096 window then
+# admits ~260k-distinct-term documents. -2 keeps the window contract at
+# the (practically unreachable) per-shard boundary. field_copy keeps
+# the copy O(word) — the checked str_slice would re-scan the whole body
+# per word.
+fn doc_terms_shard_into(body: Str, shard: Int, counts: Map<Str,Int>) -> Int {
+    let n = body.len()
+    let mut pos = 0
+    let mut total = 0
+    while pos < n {
+        let b0 = body[pos]
+        if b0 == 32 or b0 == 9 or b0 == 10 or b0 == 13 {
+            pos += 1
+        } else {
+            let start = pos
+            while pos < n {
+                let b1 = body[pos]
+                if b1 == 32 or b1 == 9 or b1 == 10 or b1 == 13 { break }
+                pos += 1
+            }
+            if token_shard_at(body, start, pos) == shard {
+                let word = field_copy(body, start, pos)
+                if counts.contains(word) {
+                    let prev = counts.get(word, 0)
+                    counts.insert(word, prev + 1)
+                } else {
+                    if counts.len() >= 4096 { return 0 - 2 }
+                    counts.insert(word, 1)
+                }
+                total += 1
+            }
+        }
+    }
+    total
+}
+
 # Core ingest with the registry-membership decision passed in, so batch
 # callers (reindex) supply it from their snapshot instead of triggering a
-# whole-registry read per document.
+# whole-registry read per document. Tokenization runs once per shard
+# with the shard filter above, so no whole-document term map ever
+# exists; a -2 mid-walk can leave orphan postings for an unregistered
+# doc, which the crash model already covers (orphans stay invisible and
+# the next reindex converges).
 fn ingest_doc_known(index_dir: Str, doc_id: Str, body: Str, src_path: Str, known: Int) -> Int {
-    let counts: Map<Str,Int> = {}
-    let total = doc_terms_guarded_into(body, counts)
-    if total < 0 { return 0 - 2 }
     if index_init(index_dir) != 0 { return 0 - 1 }
-    let n = counts.len()
+    # One counts map reused across the shard passes: a let inside the
+    # loop keeps its slot's prior contents, so the reset is an explicit
+    # clear at the top of every pass.
+    let counts: Map<Str,Int> = {}
+    let mut total = 0
     let sc = shard_count()
     for s in 0..sc {
-        let b = str_builder_new()
-        let mut wrote = 0
-        for i in 0..n {
-            let term = counts.key_at(i)
-            if term_shard(term) == s {
+        counts.clear()
+        let shard_total = doc_terms_shard_into(body, s, counts)
+        if shard_total < 0 { return 0 - 2 }
+        total += shard_total
+        let cn = counts.len()
+        if cn > 0 {
+            let b = str_builder_new()
+            for i in 0..cn {
+                let term = counts.key_at(i)
                 let ab1 = str_builder_append(b, term)
                 let ab2 = str_builder_append(b, "\t")
                 let ab3 = str_builder_append(b, doc_id)
                 let ab4 = str_builder_append(b, "\t")
                 let ab5 = str_builder_append(b, Str(counts.value_at(i)))
                 let ab6 = str_builder_append(b, "\n")
-                wrote += 1
             }
-        }
-        let chunk = str_builder_finish(b)
-        if wrote > 0 {
+            let chunk = str_builder_finish(b)
             if fs_append_text(index_shard_path(index_dir, s), chunk) != 0 { return 0 - 1 }
         }
     }
@@ -395,74 +449,51 @@ fn phrase_hits(body: Str, phrase: Str) -> Int {
     hits
 }
 
-# Aggregate per-term posting totals across every shard into `totals`; -2
-# when the index vocabulary exceeds the 4096 map window, else the number
-# of distinct terms. (Byte scan per shard: posting volume is unbounded,
-# only the distinct-term map is windowed — and removed docs never appear
-# because remove_doc rewrites their posting lines away. The two tabs are
-# walked in place; only the term key is copied out per line.) Lines
-# aggregate into a shard-local map first: term-hash sharding puts ~1/64
-# of the vocabulary in one shard, so the per-line lookup scans a few
-# dozen entries instead of the whole index vocabulary — the map's
-# linear find over ~3k terms was the entire top-at-scale cost — and
-# each local map merges into `totals` once per shard. A local map that
-# hits the 4096 window proves the index vocabulary exceeds it too, so
-# the -2 contract is unchanged on both paths.
-fn term_totals_into(index_dir: Str, totals: Map<Str,Int>) -> Int {
-    let sc = shard_count()
-    # One shard-local map reused across iterations: a let inside the loop
-    # would keep its slot's prior contents, so the reset is an explicit
-    # clear() at the top of every shard.
-    let local: Map<Str,Int> = {}
-    for s in 0..sc {
-        let path = index_shard_path(index_dir, s)
-        if path.exists() {
-            local.clear()
-            let text = path.read()
-            let n = text.len()
-            let mut pos = 0
-            while pos < n {
-                let mut le = pos
-                while le < n {
-                    if text[le] == 10 { break }
-                    le += 1
-                }
-                let mut t1 = pos
-                while t1 < le {
-                    if text[t1] == 9 { break }
-                    t1 += 1
-                }
-                if t1 > pos and t1 < le {
-                    let mut t2 = t1 + 1
-                    while t2 < le {
-                        if text[t2] == 9 { break }
-                        t2 += 1
-                    }
-                    if t2 < le {
-                        let term = field_copy(text, pos, t1)
-                        let add = field_digits(text, t2 + 1, le)
-                        if local.contains(term) {
-                            local.insert(term, local.get(term, 0) + add)
-                        } else {
-                            if local.len() >= 4096 { return 0 - 2 }
-                            local.insert(term, add)
-                        }
-                    }
-                }
-                pos = le + 1
+# Distinct totals for ONE shard's terms; -2 when that shard's
+# vocabulary exceeds the 4096 map window (per-shard boundary — the
+# whole-index vocabulary never needs one map, because a term's postings
+# all live in its own hash shard, so one shard's map already holds the
+# complete total for every term in it). Byte scan per shard: posting
+# volume is unbounded, the two tabs are walked in place, and only the
+# term key is copied out per line. Removed docs never appear because
+# remove_doc rewrites their posting lines away; crash-retried duplicate
+# lines can inflate these diagnostic totals until the next update
+# rewrites them (documented window).
+fn shard_totals_into(index_dir: Str, s: Int, totals: Map<Str,Int>) -> Int {
+    let path = index_shard_path(index_dir, s)
+    if not path.exists() { return 0 }
+    let text = path.read()
+    let n = text.len()
+    let mut pos = 0
+    while pos < n {
+        let mut le = pos
+        while le < n {
+            if text[le] == 10 { break }
+            le += 1
+        }
+        let mut t1 = pos
+        while t1 < le {
+            if text[t1] == 9 { break }
+            t1 += 1
+        }
+        if t1 > pos and t1 < le {
+            let mut t2 = t1 + 1
+            while t2 < le {
+                if text[t2] == 9 { break }
+                t2 += 1
             }
-            let ln = local.len()
-            for li in 0..ln {
-                let lt = local.key_at(li)
-                let lv = local.value_at(li)
-                if totals.contains(lt) {
-                    totals.insert(lt, totals.get(lt, 0) + lv)
+            if t2 < le {
+                let term = field_copy(text, pos, t1)
+                let add = field_digits(text, t2 + 1, le)
+                if totals.contains(term) {
+                    totals.insert(term, totals.get(term, 0) + add)
                 } else {
                     if totals.len() >= 4096 { return 0 - 2 }
-                    totals.insert(lt, lv)
+                    totals.insert(term, add)
                 }
             }
         }
+        pos = le + 1
     }
     totals.len()
 }

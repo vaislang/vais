@@ -491,10 +491,11 @@ mkdir -p "$huge_docs_dir"
 seq -s ' ' 0 4200 > "$huge_docs_dir/big.txt"
 printf 'alpha beta\n' > "$huge_docs_dir/ok1.txt"
 printf 'beta gamma\n' > "$huge_docs_dir/ok2.txt"
-expect_exit "vaisdb oversized doc skipped in batch" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' ingest-dir '$huge_idx' '$huge_docs_dir' 2>/dev/null | grep -qx 'ingested 2 documents'"
-expect_exit "vaisdb oversized skip reported on stderr" 0 /bin/sh -c "rm -rf '$huge_idx'; '$vdb_dist/bin/vaisdb' ingest-dir '$huge_idx' '$huge_docs_dir' 2>&1 >/dev/null | grep -q 'skipped (too large): big'"
-expect_exit "vaisdb oversized single ingest rejected" 3 /bin/sh -c "'$vdb_dist/bin/vaisdb' ingest '$huge_idx' big '$huge_docs_dir/big.txt' >/dev/null"
-expect_exit "vaisdb batch survivors queryable" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' stats '$huge_idx' | grep -qx 'docs=2 terms=4'"
+expect_exit "vaisdb big-vocab doc ingests in batch" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' ingest-dir '$huge_idx' '$huge_docs_dir' 2>/dev/null | grep -qx 'ingested 3 documents'"
+expect_exit "vaisdb big-vocab ingest reports no skip" 0 /bin/sh -c "rm -rf '$huge_idx'; '$vdb_dist/bin/vaisdb' ingest-dir '$huge_idx' '$huge_docs_dir' 2>&1 >/dev/null | grep -q 'skipped (too large)' && exit 1; exit 0"
+expect_exit "vaisdb big-vocab doc searchable" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$huge_idx' 2100 2 | grep -q '^1\. big=1 '"
+expect_exit "vaisdb big-vocab index top works" 5 /bin/sh -c "'$vdb_dist/bin/vaisdb' top '$huge_idx' 5 >/dev/null"
+expect_exit "vaisdb batch survivors queryable" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' stats '$huge_idx' | grep -qx 'docs=3 postings=4205'"
 
 search_docs="$tmp/vaisdb-search-docs"
 search_idx="$tmp/vaisdb-search-idx"
@@ -521,7 +522,7 @@ expect_exit "vaisdb reindex skips unchanged" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb
 printf 'alpha beta epsilon\n' > "$reindex_docs/r1.txt"
 expect_exit "vaisdb reindex updates changed doc" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=1 removed=0 skipped=1'"
 expect_exit "vaisdb reindex refreshed content searchable" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$reindex_idx' epsilon 2 | grep -q '^1\. r1=1 '"
-expect_exit "vaisdb reindex stats stay exact" 0 /bin/sh -c "out=\$('$vdb_dist/bin/vaisdb' stats '$reindex_idx' 2>/dev/null); [ \"\$out\" = 'docs=2 terms=5' ]"
+expect_exit "vaisdb reindex stats stay exact" 0 /bin/sh -c "out=\$('$vdb_dist/bin/vaisdb' stats '$reindex_idx' 2>/dev/null); [ \"\$out\" = 'docs=2 postings=5' ]"
 expect_exit "vaisdb why breaks down the score" 3 "$vdb_dist/bin/vaisdb" why "$reindex_idx" "alpha epsilon epsilon" r1
 expect_exit "vaisdb why per-term line" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' why '$reindex_idx' 'alpha epsilon epsilon' r1 | grep -qx '  epsilon q=2 doc=1 adds 2'"
 expect_exit "vaisdb why total line" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' why '$reindex_idx' 'alpha epsilon epsilon' r1 | grep -qx 'score=3'"
@@ -634,7 +635,7 @@ expect_exit "vaisdb reindex rejects unknown flag" 1 /bin/sh -c "'$vdb_dist/bin/v
 rm "$reindex_docs/r2.txt"
 expect_exit "vaisdb reindex removes deleted docs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=0 removed=1 skipped=1'"
 expect_exit "vaisdb reindex removed doc leaves search" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$reindex_idx' gamma 2 | cmp -s - /dev/null"
-expect_exit "vaisdb reindex stats drop removed doc" 0 /bin/sh -c "out=\$('$vdb_dist/bin/vaisdb' stats '$reindex_idx' 2>/dev/null); [ \"\$out\" = 'docs=1 terms=3' ]"
+expect_exit "vaisdb reindex stats drop removed doc" 0 /bin/sh -c "out=\$('$vdb_dist/bin/vaisdb' stats '$reindex_idx' 2>/dev/null); [ \"\$out\" = 'docs=1 postings=3' ]"
 
 map_cap_src="$tmp/map-cap-boundary.vais"
 cat > "$map_cap_src" <<'VAIS'

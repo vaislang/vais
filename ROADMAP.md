@@ -22,7 +22,35 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-08d) — v1.2.0 릴리스 컷 + 도그푸딩 재개
+## 현재 작업 (2026-08-08f) — 4096 창 아크: 샤드-파티션으로 창 요구 제거
+모드: 개별선택 (도그푸딩 실수요 2건: repo top "vocabulary too large" +
+워킹 노트 per-doc 어휘 초과 skip)
+설계 결정: **창 상향(컴파일러) 대신 term-해시 파티션 불변식 활용** — 한
+term의 포스팅은 전부 자기 샤드에만 있으므로, 전역/per-doc 맵 요구를
+per-shard(~어휘/64)로 낮추면 4096 창 안에서 ~26만 어휘까지 동작. 창
+상향은 전 맵 메모리 64배 + 선형탐색 악화라 기각(해시맵 런타임은 별도
+대형 아크로 보류).
+- [x] 1. top 전역 맵 제거 ✅ 2026-08-08 — shard_totals_into(단일 샤드) +
+      run_top k-best fold(min-replace, k는 4095 리스트 계약으로 clamp),
+      distinct=Σ샤드. 1000-doc 출력 동일(동률 경계 2행 순서 교환만 —
+      집합 동일, 계약 아님). 5001-어휘 인덱스에서 top 정상.
+- [x] 2. ingest per-shard 토크나이즈 ✅ — doc_terms_shard_into(in-place
+      token_shard_at 판정, 소속 단어만 field_copy — checked str_slice의
+      O(position) 회피 부수효과), term_shard→token_shard_at 위임(해시
+      단일원천). 4100-어휘 문서 ingest+검색 성공, cold reindex +7%
+      (1,632→1,745ms — 64-패스 실비용, 수용). 트랩: -2 mid-walk 고아
+      포스팅은 기존 크래시 모델이 커버.
+- [x] 3. 게이트 계약 재작성 ✅ — oversized 3케이스 → big-vocab 4케이스
+      (ingest 성공/무skip/검색/top — top 케이스는 8비트 exit 함정으로
+      k=5 재작성), self-test 22~24 신계약(+79/80 스코어 검증), stats
+      `postings=` 라벨(워크플로 3그렙+스케일 게이트 동기화).
+- [x] 4. 실사용+환류 ✅ — vaisdb-repo.sh 워킹 노트 3종 재편입(added=3,
+      skip 소멸, WORKLOG가 검색 1위), repo top 동작(16 docs/30,710
+      postings). similar 대형 소스 -2 유지 문서화. CHANGELOG/WORKLOG.
+진행률: 4/4 (100%) — 게이트: fmt/front/test.sh 410/parity 410/scale/
+release 전부 GREEN (커밋 a862d163)
+
+## 직전 완료 (2026-08-08d) — v1.2.0 릴리스 컷 + 도그푸딩 재개
 모드: 개별선택 (사용자 지시: 릴리스 컷 → 도그푸딩)
 - [x] 1. v1.2.0 컷 ✅ 2026-08-08 — VAIS_VERSION 1.1.0→1.2.0(참조는
       --version 3사이트뿐), CHANGELOG Unreleased→v1.2.0 회전(v1.1.0 이후
@@ -44,11 +72,14 @@ This file tracks current work and completed gate-backed language surface.
 진행률: 2/2 (100%)
 
 ### 다음 후보 (2026-08-08 도그푸딩 환류)
-- 4096 맵 창 상향 or 문서 청킹: 실수요 2건 실증(top on repo 코퍼스 +
-  워킹 노트 ingest). 컴파일러 계약 아크(trap·게이트 정합, 양 엔진) or
-  제품측 청킹 — 설계 판단 필요.
+- ~~4096 맵 창(top + 워킹 노트 ingest)~~ (완결 2026-08-08f: 창 상향 대신
+  샤드-파티션으로 창 요구 자체 제거 — 컴파일러 무변경).
 - 부분어/substring 검색: exact-token 한계로 결합어 미검색. 토큰화 확장
   (하이픈/언더스코어 분리) or substring 폴백 — 랭킹 의미론 재검토 동반.
+- similar 대형 소스 문서: 쿼리 맵이 whole-doc 창(-2 유지). 수요 시
+  ingest와 같은 per-shard 쿼리 파티션 적용 가능(잔여 알려진 한계).
+- repo top 상위가 불용어(and/the/-): 실사용감 개선용 stopword/최소길이
+  필터 후보(랭킹 의미론 판단 동반).
 
 ## 직전 완료 (2026-08-08c) — 잔여 후보 소탕: unknown-variable front + top 상수
 모드: 개별선택 (2026-08-08 두 사이클의 경유 발견 2건 종결)
