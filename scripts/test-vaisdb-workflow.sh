@@ -656,6 +656,15 @@ expect_exit "vaisdb similar big-source index builds" 0 /bin/sh -c "'$vdb_dist/bi
 expect_exit "vaisdb similar handles big-vocab sources" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' similar '$simbig_idx' big 2 | grep -q '^1\. big2=501'"
 expect_exit "vaisdb top -min filters short terms" 3 /bin/sh -c "'$vdb_dist/bin/vaisdb' top '$simbig_idx' 3 -min 4 >/dev/null"
 expect_exit "vaisdb top -min output excludes short terms" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' top '$simbig_idx' 3 -min 4 | grep -q '^[0-9]\. [0-9]\{1,3\}=' && exit 1; exit 0"
+
+# search -all requires every query term: partial matches drop while
+# survivors keep the plain contribution sum (OR stays the default).
+printf 'gate here alone\n' > "$tok_docs/tok2.txt"
+expect_exit "vaisdb -all corpus grows" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$tok_idx' '$tok_docs' | grep -qx 'reindexed added=1 updated=0 removed=0 skipped=1'"
+expect_exit "vaisdb search OR keeps partial matches" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$tok_idx' 'fixpoint gate' 3 | grep -q '^2\. tok2=1'"
+expect_exit "vaisdb search -all drops partial matches" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$tok_idx' 'fixpoint gate' 3 -all | grep -q 'tok2' && exit 1; exit 0"
+expect_exit "vaisdb search -all survivor keeps sum" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$tok_idx' 'fixpoint gate' 3 -all | grep -q '^1\. tok=3 '"
+expect_exit "vaisdb search -all exit is top score" 3 "$vdb_dist/bin/vaisdb" search "$tok_idx" "fixpoint gate" 3 -all
 rm "$reindex_docs/r2.txt"
 expect_exit "vaisdb reindex removes deleted docs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=0 removed=1 skipped=1'"
 expect_exit "vaisdb reindex removed doc leaves search" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$reindex_idx' gamma 2 | cmp -s - /dev/null"

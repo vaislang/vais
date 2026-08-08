@@ -405,6 +405,37 @@ fn query_scores_into(index_dir: Str, query: Map<Str,Int>, scores: Map<Str,Int>) 
     scores.len()
 }
 
+# All-terms ranking: fold per-term contributions like query_scores_into,
+# but track how many query terms matched each doc and zero out any doc
+# that missed one — the compound tokenizer made identifier queries drown
+# in the OR-sum of their common split tokens (str/at), and requiring
+# every term restores specificity. Zero scores stay hidden by the
+# search printer, and survivor scores keep the plain contribution sum.
+fn query_scores_all_into(index_dir: Str, query: Map<Str,Int>, scores: Map<Str,Int>) -> Int {
+    let qn = query.len()
+    let matched: Map<Str,Int> = {}
+    let tscores: Map<Str,Int> = {}
+    for i in 0..qn {
+        tscores.clear()
+        let hits = scan_term_scores(index_dir, query.key_at(i), query.value_at(i), tscores)
+        let tn = tscores.len()
+        for t in 0..tn {
+            let doc = tscores.key_at(t)
+            let prev = scores.get(doc, 0)
+            scores.insert(doc, prev + tscores.value_at(t))
+            matched.insert(doc, matched.get(doc, 0) + 1)
+        }
+    }
+    let sn = scores.len()
+    for si in 0..sn {
+        let sdoc = scores.key_at(si)
+        if matched.get(sdoc, 0) != qn {
+            scores.insert(sdoc, 0)
+        }
+    }
+    scores.len()
+}
+
 # More-like-this scoring for one source body without a whole-document
 # query map: tokens count per shard (the ingest partition) and each
 # shard's terms scan their own postings, so a source document of any

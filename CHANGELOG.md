@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- `search` accepts a trailing `-all`: every query term must match a
+  document for it to score (partial matches drop; survivors keep the
+  plain contribution sum, and OR stays the default). This restores
+  specificity for identifier queries after compound splitting — on the
+  whole-repo corpus, `token_shard_at -all` ranks the defining module
+  first where the OR-sum had buried it under common split tokens.
+  Known remaining limit, recorded for demand: when a common-token-heavy
+  document genuinely contains every term (`str_slice_raw` and the
+  self-host compiler), the survivor ranking is still dominated by
+  common-token counts — rare-term weighting or saturation is the next
+  ranking step if practice demands it.
+
 ### Changed
 
 - `scripts/vaisdb-repo.sh` now searches the whole repository: six

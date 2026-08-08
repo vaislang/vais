@@ -22,6 +22,23 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
+## 현재 작업 (2026-08-08i) — 랭킹 특이성: search `-all` 전-텀-필수 모드
+모드: 개별선택 (2026-08-08h 환류: 식별자 쿼리가 공통 토큰 OR-합산에 묻힘)
+설계: IDF-류 가중은 전 스코어 계약 churn + 정수 랭킹 품질 늪이라 기각,
+**옵트인 `-all`**(기본 의미론 무변경, 명확성 원칙) 채택.
+- [x] 1. query_scores_all_into ✅ 2026-08-08 — per-term tscores + matched
+      카운터, 미달 문서 0점화, 생존자 합산 유지, ranked_docs_from_
+      scores_into 재사용.
+- [x] 2. search [k] [-all] ✅ — repo 실코퍼스: `token_shard_at -all`이
+      정의 모듈(e337 index) 1위 회복(OR에선 fixpoint_full=156 지배).
+      **잔여 한계 기록**: 공통-토큰 다량 문서가 전 텀을 진짜 보유하면
+      (str_slice_raw × fixpoint_full) 생존자 랭킹은 여전히 공통-토큰
+      지배 — 희귀-텀 가중/포화가 다음 수요 후보.
+- [x] 3. 게이트 ✅ — workflow +5(-all 부분탈락/OR 보존/생존자 합산/exit)
+      + self-test 84~87. 체인+release 후 커밋·푸시.
+진행률: 3/3 (100%) — 게이트: fmt/front/test.sh 410/parity 410/scale/
+release 전부 GREEN
+
 ## 직전 완료 (2026-08-08h) — vaisdb-repo.sh 전체-repo 코퍼스 확장
 모드: 개별선택 (사용자 지시: 푸시 + 확장)
 - [x] 1. 푸시 ✅ 2026-08-08 — main(c5e75d88..ab4aaaf3, 오늘 8사이클) +
@@ -108,9 +125,9 @@ release 전부 GREEN (커밋 a862d163)
 진행률: 2/2 (100%)
 
 ### 다음 후보 (2026-08-08 도그푸딩 환류)
-- 랭킹 특이성(2026-08-08h 실측): 토크나이저 분리 후 식별자 쿼리의 공통
-  토큰(str/at)이 OR-합산을 지배 — IDF-류 희귀-텀 가중 or AND 모드
-  (랭킹 의미론 재설계 동반, 555-doc 실코퍼스로 검증 가능).
+- ~~랭킹 특이성(식별자 쿼리 공통-토큰 지배)~~ (완결 2026-08-08i:
+  `-all` 옵트인 — 후보 집합 회복. 잔여: 전-텀 보유 문서의 생존자 랭킹
+  공통-토큰 지배 → 희귀-텀 가중/포화, 수요 시).
 - ~~4096 맵 창(top + 워킹 노트 ingest)~~ (완결 2026-08-08f: 창 상향 대신
   샤드-파티션으로 창 요구 자체 제거 — 컴파일러 무변경).
 - ~~부분어/substring 검색(결합어 미검색)~~ (완결 2026-08-08g: is_word_byte

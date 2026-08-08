@@ -1,5 +1,23 @@
 # Vais Worklog
 
+## 2026-08-08i (랭킹 특이성 — search `-all` 전-텀-필수 모드)
+
+IDF-류 가중은 전 스코어 계약 churn + 정수 랭킹 품질 늪이라 기각,
+**옵트인 `-all`** 채택(기본 OR 무변경). query_scores_all_into =
+per-term tscores 스캔 + matched 카운터 → 미달 문서 0점화(0점은 search
+가 이미 숨김), 생존자는 기존 합산 유지, similar의
+ranked_docs_from_scores_into 재사용.
+
+repo 실코퍼스 검증: `token_shard_at -all` → 정의 모듈(e337 index) 1위
+회복(OR에선 str/at 보유량으로 fixpoint_full=156이 지배했음). **잔여
+한계(수요 기록)**: 전 텀을 진짜 보유한 공통-토큰-다량 문서
+(str_slice_raw × fixpoint_full — %raw IR 라벨까지 보유)는 생존자
+랭킹이 여전히 공통-토큰 지배 — 희귀-텀 가중(IDF)/포화(TF 캡)가 다음
+수요 후보.
+
+계약 잠금: workflow +5(-all 부분 탈락/OR 보존 대조/생존자 합산/무파이프
+exit=top score) + self-test 84~87(half 문서 0점화·d1 합산 4).
+
 ## 2026-08-08h (vaisdb-repo.sh 전체-repo 코퍼스 + 오늘 8사이클 푸시)
 
 main(오늘 8사이클 11커밋) + v1.2.0 태그 origin 푸시. vaisdb-repo.sh를

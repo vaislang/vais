@@ -135,7 +135,7 @@ fn run_rank(index_dir: Str, query_text: Str, k: Int) -> Int {
     return top_doc_score(index_dir, query)
 }
 
-fn run_search(index_dir: Str, query_text: Str, k: Int) -> Int {
+fn run_search(index_dir: Str, query_text: Str, k: Int, all_mode: Int) -> Int {
     if index_exists(index_dir) != 1 {
         print("error: index not found")
         return 3
@@ -155,7 +155,15 @@ fn run_search(index_dir: Str, query_text: Str, k: Int) -> Int {
         return 1
     }
     let ranked: List<RankedDoc> = []
-    let count = ranked_docs_into(index_dir, query, ranked)
+    let mut count = 0
+    if all_mode == 1 {
+        # -all: every query term must match a doc for it to score.
+        let scores: Map<Str,Int> = {}
+        let filled = query_scores_all_into(index_dir, query, scores)
+        count = ranked_docs_from_scores_into(index_dir, scores, ranked)
+    } else {
+        count = ranked_docs_into(index_dir, query, ranked)
+    }
     if count == 0 {
         print("error: index has no documents")
         return 3
@@ -572,7 +580,7 @@ fn usage() -> Int {
     print("       vaisdb top <index> [k] [-min <bytes>]")
     print("       vaisdb phrase <index> <phrase-text> [k]")
     print("       vaisdb rank <index> <query-text> <k>")
-    print("       vaisdb search <index> <query-text> [k]")
+    print("       vaisdb search <index> <query-text> [k] [-all]")
     print("       vaisdb msearch <query-text> <k> <index> [index...]")
     print("       vaisdb ingest-stdin <index> <doc-id>")
     print("       vaisdb docs <index>")
@@ -745,6 +753,16 @@ fn self_test() -> Int {
     if doc_terms_guarded_into("4099", hq) != 1 { return 79 }
     if doc_score(dir, "huge", hq) != 1 { return 80 }
 
+    # -all semantics: a doc missing any query term zeroes out while
+    # survivors keep the plain contribution sum.
+    if ingest_doc(dir, "half", "ai half body", "-") != 3 { return 84 }
+    let aq: Map<Str,Int> = {}
+    if doc_terms_guarded_into("ai cache", aq) != 2 { return 85 }
+    let ascores: Map<Str,Int> = {}
+    let afilled = query_scores_all_into(dir, aq, ascores)
+    if ascores.get("d1", 0) != 4 { return 86 }
+    if ascores.get("half", 0) != 0 { return 87 }
+
     # Cross-index merge: hits from different indexes sort by score while
     # keeping their `<index>/<doc>` labels and source paths.
     let merged: List<MergedHit> = []
@@ -870,8 +888,10 @@ fn main() -> Int {
         return run_rank(proc_arg(1), proc_arg(2), parse_int(proc_arg(3)))
     }
     if command == "search" {
-        if proc_argc() == 3 { return run_search(proc_arg(1), proc_arg(2), 5) }
-        if proc_argc() == 4 { return run_search(proc_arg(1), proc_arg(2), parse_int(proc_arg(3))) }
+        if proc_argc() == 3 { return run_search(proc_arg(1), proc_arg(2), 5, 0) }
+        if proc_argc() == 4 and proc_arg(3) == "-all" { return run_search(proc_arg(1), proc_arg(2), 5, 1) }
+        if proc_argc() == 4 { return run_search(proc_arg(1), proc_arg(2), parse_int(proc_arg(3)), 0) }
+        if proc_argc() == 5 and proc_arg(4) == "-all" { return run_search(proc_arg(1), proc_arg(2), parse_int(proc_arg(3)), 1) }
         return usage()
     }
     if command == "msearch" {
