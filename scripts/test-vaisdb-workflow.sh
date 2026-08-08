@@ -604,6 +604,33 @@ expect_exit "vaisdb atomic reindex converges over litter" 0 /bin/sh -c "'$vdb_di
 expect_exit "vaisdb atomic converged score stays exact" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$atomic_idx' alpha 3 | grep -q '^1\. a1=2 '"
 expect_exit "vaisdb atomic remove leaves no temp litter" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' remove '$atomic_idx' a2 >/dev/null; ls '$atomic_idx/terms/'*.txt.tmp 2>/dev/null && exit 1; test -f '$atomic_idx/docs.txt.tmp' && exit 1; exit 0"
 expect_exit "vaisdb atomic stale temp litter is ignored" 0 /bin/sh -c "printf 'junk with no tabs\n' > '$atomic_idx/terms/s5.txt.tmp'; '$vdb_dist/bin/vaisdb' search '$atomic_idx' alpha 3 | grep -q '^1\. a1=2 '"
+
+# Recursive directory walks: `-r` collects subdirectory documents under
+# relative-path doc ids while the flat default keeps its historical
+# top-level-only contract; the incremental reindex semantics (skip /
+# update / deletion sync) must hold for subdirectory files too.
+recur_docs="$tmp/vaisdb-recur-docs"
+recur_flat_idx="$tmp/vaisdb-recur-flat-idx"
+recur_idx="$tmp/vaisdb-recur-idx"
+rm -rf "$recur_docs" "$recur_flat_idx" "$recur_idx"
+mkdir -p "$recur_docs/sub/deep"
+printf 'alpha beta\n' > "$recur_docs/r1.txt"
+printf 'beta gamma\n' > "$recur_docs/sub/s1.txt"
+printf 'gamma delta\n' > "$recur_docs/sub/deep/d1.md"
+touch -t 202001010000 "$recur_docs/sub/s1.txt"
+expect_exit "vaisdb flat reindex stays top-level" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$recur_flat_idx' '$recur_docs' | grep -qx 'reindexed added=1 updated=0 removed=0 skipped=0'"
+expect_exit "vaisdb recursive reindex walks subdirs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$recur_idx' '$recur_docs' -r | grep -qx 'reindexed added=3 updated=0 removed=0 skipped=0'"
+expect_exit "vaisdb recursive doc ids carry relative paths" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' docs '$recur_idx' | grep -qx 'sub/deep/d1'"
+expect_exit "vaisdb recursive search hits subdir docs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$recur_idx' gamma 3 | grep -q '^1\. sub/'"
+expect_exit "vaisdb recursive warm reindex skips all" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$recur_idx' '$recur_docs' -r | grep -qx 'reindexed added=0 updated=0 removed=0 skipped=3'"
+printf 'beta gamma epsilon\n' > "$recur_docs/sub/s1.txt"
+expect_exit "vaisdb recursive update tracks subdir mtime" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$recur_idx' '$recur_docs' -r | grep -qx 'reindexed added=0 updated=1 removed=0 skipped=2'"
+expect_exit "vaisdb recursive updated subdir content searchable" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$recur_idx' epsilon 2 | grep -q '^1\. sub/s1=1 '"
+rm "$recur_docs/sub/deep/d1.md"
+expect_exit "vaisdb recursive deletion sync reaches subdirs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$recur_idx' '$recur_docs' -r | grep -qx 'reindexed added=0 updated=0 removed=1 skipped=2'"
+expect_exit "vaisdb recursive removed subdir doc leaves search" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$recur_idx' delta 2 | cmp -s - /dev/null"
+expect_exit "vaisdb recursive ingest-dir walks subdirs" 0 /bin/sh -c "rm -rf '$tmp/vaisdb-recur-ing'; '$vdb_dist/bin/vaisdb' ingest-dir '$tmp/vaisdb-recur-ing' '$recur_docs' -r | grep -qx 'ingested 2 documents'"
+expect_exit "vaisdb reindex rejects unknown flag" 1 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$recur_idx' '$recur_docs' -x >/dev/null 2>&1"
 rm "$reindex_docs/r2.txt"
 expect_exit "vaisdb reindex removes deleted docs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=0 removed=1 skipped=1'"
 expect_exit "vaisdb reindex removed doc leaves search" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$reindex_idx' gamma 2 | cmp -s - /dev/null"

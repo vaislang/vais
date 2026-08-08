@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- vaisdb `ingest-dir` and `reindex` accept a trailing `-r` to walk
+  subdirectories (the vaisgrep `-r` walk shape over `fs_list_dirs`),
+  collecting documents under extension-stripped relative-path doc ids
+  (`design/LANGUAGE`) so nested trees index collision-free; the flat
+  default keeps its historical top-level-only contract. Incremental
+  semantics (skip, mtime update, deletion sync) hold for subdirectory
+  files, locked by eleven recursive workflow-gate cases. Dogfooded on
+  this repository's own docs tree via the new
+  `scripts/vaisdb-repo.sh` wrapper (flat indexed 2 of 13 documents;
+  `-r` indexes all 13). Recorded demand from that dogfooding: the 4096
+  map window now blocks two real uses (index-wide `top` on the repo
+  corpus and ingesting the working notes, whose per-document
+  vocabularies exceed the window), and exact whitespace-token search
+  misses hyphen/underscore compounds (`test-fixpoint-full`) — both
+  filed as scale-arc candidates.
+
 ## v1.2.0 - 2026-08-08
 
 ### Added

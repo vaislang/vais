@@ -639,9 +639,39 @@ fn text_suffix_len(name: Str) -> Int {
     0
 }
 
-fn ingest_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
+# Recursive variant of the directory walk: collect indexable files as
+# prefix-joined relative names (`design/LANGUAGE.md`), depth-first over
+# fs_list_dirs (the vaisgrep -r walk shape), so subdirectory documents
+# keep collision-free doc ids after the extension strip.
+fn collect_text_files(dir: Str, prefix: Str, out: List<Str>) -> Int {
+    for name in dir.files() {
+        if text_suffix_len(name) > 0 {
+            if prefix.len() == 0 {
+                out.push(name)
+            } else {
+                out.push(f"{prefix}/{name}")
+            }
+        }
+    }
+    for sub in dir.dirs() {
+        let mut next = sub
+        if prefix.len() > 0 { next = f"{prefix}/{sub}" }
+        let walked = @(path_join(dir, sub), next, out)
+    }
+    out.len()
+}
+
+# Directory listing for the ingest walks: flat keeps the historical
+# fs_list_files contract (every file, callers filter), recursive returns
+# pre-filtered relative text paths.
+fn dir_walk_names(dir: Str, recurse: Int, names: List<Str>) -> Int {
+    if recurse == 1 { return collect_text_files(dir, "", names) }
+    fs_list_files(dir, names)
+}
+
+fn ingest_dir_into(index_dir: Str, dir: Str, recurse: Int) -> Result<Str, Str> {
     let names: List<Str> = []
-    let count = fs_list_files(dir, names)
+    let count = dir_walk_names(dir, recurse, names)
     if count == 0 { return Err("no documents in directory") }
     let mut ingested = 0
     let mut failed = 0
@@ -670,9 +700,9 @@ fn ingest_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
 # Incremental refresh: new files ingest, files whose current mtime moved
 # past the stored stamp are removed and re-ingested, unchanged files skip.
 # Ok payload is `added updated skipped` as space-separated digits.
-fn reindex_dir_into(index_dir: Str, dir: Str) -> Result<Str, Str> {
+fn reindex_dir_into(index_dir: Str, dir: Str, recurse: Int) -> Result<Str, Str> {
     let names: List<Str> = []
-    let count = fs_list_files(dir, names)
+    let count = dir_walk_names(dir, recurse, names)
     if count == 0 { return Err("no documents in directory") }
     let mut added = 0
     let mut updated = 0

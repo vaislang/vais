@@ -1,5 +1,27 @@
 # Vais Worklog
 
+## 2026-08-08e (도그푸딩 재개 — vaisdb 재귀 인덱싱 + repo 검색 워크플로)
+
+**flat 갭 라이브 확증 → 즉시 구현.** docs/는 13개 중 11개가 서브
+디렉토리(design/reference/release)라 flat reindex가 2개만 수집 —
+`ingest-dir`/`reindex`에 trailing `-r` 추가. collect_text_files =
+vaisgrep `-r` 워크 셰이프(`dir.files()` 필터 + `dir.dirs()` `@` 재귀),
+doc id = 확장자-제거 상대경로(`design/LANGUAGE`) — 서브디렉토리 간
+충돌 없음, flat 기본값은 역사적 계약 그대로. 증분 의미론(skip/mtime
+update/삭제 싱크)이 서브디렉토리 파일에도 성립 — 워크플로 게이트 +11
+케이스로 잠금. `scripts/vaisdb-repo.sh` 일상화 래퍼(항상 증분 reindex
+후 서브커맨드 실행, 인덱스는 build/ 아래).
+
+**실사용 발견 3건(수요 환류)**: ① **4096 맵 창이 실수요 2건 차단** —
+repo 코퍼스 top이 "vocabulary too large"(-2 계약 LOUD ✓), 워킹 노트
+3종(WORKLOG/ROADMAP/CHANGELOG)은 per-doc 어휘 초과로 ingest skip.
+다음 스케일 아크(창 상향 or 청킹)의 첫 실증 근거. ② exact
+화이트스페이스-토큰 검색이 결합어 미검색(`fixpoint` 쿼리가
+`test-fixpoint-full`/`fixpoint_full.vais` 토큰을 못 잡음 — 스니펫
+substring 하이라이트와 대비되어 체감 큼). ③ similar(TOKEN-DENSITY ↔
+SCALE-BASELINE 최유사)/why/warm reindex(skipped=13)는 실사용 체감 정상.
+stats의 `terms=` 라벨이 실제로는 포스팅 라인 수인 점은 코스메틱 후보.
+
 ## 2026-08-08d (v1.2.0 릴리스 컷)
 
 v1.1.0(2026-07-26) 이후 38커밋 회전: 읽기 경로 선형화(str_slice 2차

@@ -74,8 +74,8 @@ fn run_report(index_dir: Str, query_text: Str) -> Int {
     return best_score
 }
 
-fn run_ingest_dir(index_dir: Str, dir: Str) -> Int {
-    let flow = ingest_dir_into(index_dir, dir)
+fn run_ingest_dir(index_dir: Str, dir: Str, recurse: Int) -> Int {
+    let flow = ingest_dir_into(index_dir, dir, recurse)
     let note = match flow { Ok(count) => count, Err(msg) => msg }
     if flow_failed(note) == 1 {
         print(f"error: {note}")
@@ -95,8 +95,8 @@ fn flow_failed(note: Str) -> Int {
     return 1
 }
 
-fn run_reindex(index_dir: Str, dir: Str) -> Int {
-    let flow = reindex_dir_into(index_dir, dir)
+fn run_reindex(index_dir: Str, dir: Str, recurse: Int) -> Int {
+    let flow = reindex_dir_into(index_dir, dir, recurse)
     let note = match flow { Ok(rc) => rc, Err(msg) => msg }
     if flow_failed(note) == 1 {
         print(f"error: {note}")
@@ -528,8 +528,8 @@ fn usage() -> Int {
     print("usage: vaisdb ingest <index> <doc-id> <doc-file>")
     print("       vaisdb query <index> <doc-id> <query-text>")
     print("       vaisdb report <index> <query-text>")
-    print("       vaisdb ingest-dir <index> <doc-dir>")
-    print("       vaisdb reindex <index> <doc-dir>")
+    print("       vaisdb ingest-dir <index> <doc-dir> [-r]")
+    print("       vaisdb reindex <index> <doc-dir> [-r]")
     print("       vaisdb why <index> <query> <doc-id>")
     print("       vaisdb similar <index> <doc-id> [k]")
     print("       vaisdb top <index> [k]")
@@ -570,7 +570,7 @@ fn self_test() -> Int {
     let docs_dir = path_join(root, "vais-e337-selftest-docs")
     if fs_mkdirs(docs_dir) != 0 { return 10 }
     if fs_write_text(path_join(docs_dir, "d3.txt"), "vector vector cache") != 0 { return 11 }
-    let dir_flow = ingest_dir_into(dir, docs_dir)
+    let dir_flow = ingest_dir_into(dir, docs_dir, 0)
     let dir_note = match dir_flow { Ok(count) => count, Err(msg) => msg }
     if dir_note != "1" { return 12 }
     let ranked = rank_lines(dir, query, 2)
@@ -641,10 +641,10 @@ fn self_test() -> Int {
     if fs_write_text(path_join(rdir, "r1.txt"), "alpha beta") != 0 { return 40 }
     let ridx = path_join(root, "vais-e337-selftest-reindex-idx")
     index_reset(ridx)
-    let r_flow = reindex_dir_into(ridx, rdir)
+    let r_flow = reindex_dir_into(ridx, rdir, 0)
     let r_note = match r_flow { Ok(rc1) => rc1, Err(msg) => msg }
     if r_note != "1 0 0 0" { return 41 }
-    let r_flow2 = reindex_dir_into(ridx, rdir)
+    let r_flow2 = reindex_dir_into(ridx, rdir, 0)
     let r_note2 = match r_flow2 { Ok(rc2) => rc2, Err(msg) => msg }
     if r_note2 != "0 0 0 1" { return 43 }
 
@@ -652,11 +652,11 @@ fn self_test() -> Int {
     # while the surviving doc still skips.
     let r2 = path_join(rdir, "r2.txt")
     if r2.write("gamma delta") != 0 { return 45 }
-    let r_flow3 = reindex_dir_into(ridx, rdir)
+    let r_flow3 = reindex_dir_into(ridx, rdir, 0)
     let r_note3 = match r_flow3 { Ok(rc3) => rc3, Err(msg) => msg }
     if r_note3 != "1 0 0 1" { return 46 }
     if fs_remove(r2) != 0 { return 47 }
-    let r_flow4 = reindex_dir_into(ridx, rdir)
+    let r_flow4 = reindex_dir_into(ridx, rdir, 0)
     let r_note4 = match r_flow4 { Ok(rc4) => rc4, Err(msg) => msg }
     if r_note4 != "0 0 1 1" { return 48 }
     let r_ids: List<Str> = []
@@ -714,7 +714,7 @@ fn self_test() -> Int {
     if sf3.write("zeta") != 0 { return 60 }
     let sidx = path_join(root, "vais-e337-selftest-similar-idx")
     index_reset(sidx)
-    let s_flow = reindex_dir_into(sidx, sdir)
+    let s_flow = reindex_dir_into(sidx, sdir, 0)
     let s_note = match s_flow { Ok(sc) => sc, Err(smsg) => smsg }
     if s_note != "3 0 0 0" { return 61 }
     let s_query: Map<Str,Int> = {}
@@ -769,8 +769,9 @@ fn main() -> Int {
         return run_report(proc_arg(1), proc_arg(2))
     }
     if command == "ingest-dir" {
-        if proc_argc() != 3 { return usage() }
-        return run_ingest_dir(proc_arg(1), proc_arg(2))
+        if proc_argc() == 3 { return run_ingest_dir(proc_arg(1), proc_arg(2), 0) }
+        if proc_argc() == 4 and proc_arg(3) == "-r" { return run_ingest_dir(proc_arg(1), proc_arg(2), 1) }
+        return usage()
     }
     if command == "phrase" {
         if proc_argc() == 3 { return run_phrase(proc_arg(1), proc_arg(2), 5) }
@@ -792,8 +793,9 @@ fn main() -> Int {
         return run_why(proc_arg(1), proc_arg(2), proc_arg(3))
     }
     if command == "reindex" {
-        if proc_argc() != 3 { return usage() }
-        return run_reindex(proc_arg(1), proc_arg(2))
+        if proc_argc() == 3 { return run_reindex(proc_arg(1), proc_arg(2), 0) }
+        if proc_argc() == 4 and proc_arg(3) == "-r" { return run_reindex(proc_arg(1), proc_arg(2), 1) }
+        return usage()
     }
     if command == "rank" {
         if proc_argc() != 4 { return usage() }

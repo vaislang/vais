@@ -30,11 +30,25 @@ This file tracks current work and completed gate-backed language surface.
       크래시 일관성 fs_rename·temp-then-rename·dedup / 진단 2종 front
       fn-스코프·unknown-variable / 셸소트 데수가 / vaisbox 13종).
       release 게이트 GREEN 후 태그.
-- [ ] 2. 도그푸딩 재개 — repo 문서 검색 워크플로(docs/ 서브디렉토리 포함
-      +WORKLOG+ROADMAP 인덱싱). 예상 갭: ingest-dir/reindex flat-only
-      (fs_list_files) → 재귀 수요(vaisgrep -r 전례). AS-IS 실사용으로
-      갭 확증 후 구현.
-진행률: 1/2
+- [x] 2. 도그푸딩 재개 ✅ — flat 갭 라이브 확증(docs/ 13개 중 2개만) →
+      `-r` 구현(collect_text_files: vaisgrep 워크 셰이프, 확장자-제거
+      상대경로 doc id `design/LANGUAGE`, flat 기본값 계약 불변) →
+      워크플로 게이트 +11(서브디렉토리 skip/update/삭제싱크/id 형식/
+      플래그 거부) → scripts/vaisdb-repo.sh 일상화 래퍼(항상 증분
+      reindex 후 서브커맨드). **실사용 발견 3건**: ① 4096 맵 창이 실수요
+      2건을 차단(top on repo 코퍼스 "vocabulary too large" + 워킹 노트
+      3종 per-doc 어휘 초과 skip) — 다음 스케일 아크 근거 ② exact
+      화이트스페이스-토큰 검색이 하이픈/언더스코어 결합어(`test-
+      fixpoint-full`) 미검색 — substring/부분어 수요 ③ similar/why/증분
+      정상 체감.
+진행률: 2/2 (100%)
+
+### 다음 후보 (2026-08-08 도그푸딩 환류)
+- 4096 맵 창 상향 or 문서 청킹: 실수요 2건 실증(top on repo 코퍼스 +
+  워킹 노트 ingest). 컴파일러 계약 아크(trap·게이트 정합, 양 엔진) or
+  제품측 청킹 — 설계 판단 필요.
+- 부분어/substring 검색: exact-token 한계로 결합어 미검색. 토큰화 확장
+  (하이픈/언더스코어 분리) or substring 폴백 — 랭킹 의미론 재검토 동반.
 
 ## 직전 완료 (2026-08-08c) — 잔여 후보 소탕: unknown-variable front + top 상수
 모드: 개별선택 (2026-08-08 두 사이클의 경유 발견 2건 종결)
