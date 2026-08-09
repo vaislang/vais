@@ -4,6 +4,13 @@
 
 ### Added
 
+- `bench-vaisdb-corpus.sh` gains a `search -all` timing row, and
+  docs/PERF-BASELINE.md carries the post-window/tokenizer/-all capture:
+  `-all` costs the same as plain OR, `top` improved again (154 ->
+  89 ms at 1,000 docs via the k-best fold), and cold reindex carries
+  the accepted ~13% per-shard tokenization cost that removed the
+  whole-document vocabulary ceiling.
+
 - Relevance harness, the measuring stick for ranking work:
   `scripts/test-vaisdb-relevance.sh` locks current OR and `-all`
   behavior on a role-controlled mini corpus (definition-site doc,

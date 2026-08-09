@@ -148,3 +148,34 @@ aggregates into a shard-local map first (term-hash sharding keeps one
 shard's vocabulary near 1/64 of the index) and merges per shard, which
 drops **top k=10 at 1,000 docs from 2,948 ms to 154 ms (x19)** with
 byte-identical output at both bench scales.
+
+## Post window-removal / tokenizer / -all capture (2026-08-08b)
+
+Same harness after the day's later arcs landed: per-shard ingest
+tokenization (the 4096-window removal), the non-word-byte compound
+tokenizer, per-shard `top` totals folded through a running k-best
+list, and the rarity-weighted `-all` search mode (now a bench row of
+its own).
+
+| Operation | 200 docs | 1000 docs | 5x factor |
+| --- | --- | --- | --- |
+| reindex cold | 358 ms | 1,847 ms | x5.2 |
+| reindex warm (all skip) | 8 ms | 22 ms | x2.8 |
+| search term k=10 | 7 ms | 13 ms | x1.9 |
+| search term k=10 `-all` | 7 ms | 14 ms | x2.0 |
+| msearch 2 indexes | 7 ms | 16 ms | x2.3 |
+| phrase 2-word | 12 ms | 41 ms | x3.4 |
+| similar doc k=5 | 15 ms | 57 ms | x3.8 |
+| top k=10 | 23 ms | 89 ms | x3.9 |
+
+Readings: `-all` costs the same as plain OR — its extra work (one
+registry read for N, integer rarity math, the zero-out pass) sits
+below measurement noise. `top` improved again (154 -> 89 ms) once
+run_top folded per-shard totals through a k-best list instead of
+materializing every row. Cold reindex carries the accepted cost of
+the 64-per-shard tokenization passes plus the non-word-byte predicate
+(1,632 -> 1,847 ms, ~13% against the pre-window capture) — the trade
+that removed the whole-document vocabulary ceiling. Real-world
+advisory numbers on the whole-repo corpus (553 docs, 64k postings):
+`scripts/vaisdb-repo.sh` end-to-end (mirror + incremental reindex +
+query) lands at ~0.31 s, with the query itself at 18–36 ms.
