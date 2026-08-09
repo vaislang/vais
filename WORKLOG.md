@@ -1,5 +1,26 @@
 # Vais Worklog
 
+## 2026-08-08k (릴레번스 하네스 — 랭킹 품질의 측정자)
+
+2층 구조: ① **test-vaisdb-relevance.sh**(결정적 회귀 게이트) — 역할
+통제 미니 코퍼스 7문서(정의-사이트/포화 헤비 유저/부분 매치/노이즈
+플러드/한국어)로 OR·-all의 현재 랭킹을 정확 잠금(top rows/동점 밴드/
+탈락/MRR100=70 플로어, 11어서션). 랭킹 변경은 이 수치를 의식적으로
+움직여야 함. gates.tasks 풀 래더 편입(vaisdb-scale 옆). ②
+**vaisdb-relevance-report.sh**(실코퍼스 자문) — 장수 파일 기대값 8쿼리
+를 live repo 인덱스에 OR/-all로 측정, RELEVANCE-BASELINE.md 스냅샷.
+
+**첫 캡처가 -all의 가치를 정량 입증: MRR100 17→37, hits@1 0→2,
+is_word_byte는 권외→1위.** 잔여 약점 클래스도 명명: 단일-common-텀
+쿼리(fixpoint/release gates)는 워킹 노트가 정당하게 고빈도라
+bag-of-words 무대응 — 정의-사이트/필드 가중은 인덱스 포맷 작업 동반,
+수요 대기.
+
+트랩: search의 exit=톱스코어 계약이 pipefail + errexit(expect 헬퍼의
+set -e 누출)와 만나 `rank=$(search|grep|cut)` 대입에서 스크립트가
+exit 14로 즉사 — **스코어-exit 명령의 명령치환 대입은 `|| true` 필수**
+(파이프 exit=grep 교훈의 사촌).
+
 ## 2026-08-08j (생존자 랭킹 — `-all` 희귀-텀 가중 × TF 포화)
 
 `-all` 생존자 랭킹을 정수 공식으로 교체(기본 OR 무변경): 텀별 기여 =

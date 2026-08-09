@@ -4,6 +4,20 @@
 
 ### Added
 
+- Relevance harness, the measuring stick for ranking work:
+  `scripts/test-vaisdb-relevance.sh` locks current OR and `-all`
+  behavior on a role-controlled mini corpus (definition-site doc,
+  saturated heavy user, partial match, noise flood, multibyte doc) with
+  exact top rows, tie bands, and an integer MRR100 floor (70), and
+  joins the vaismake ladder next to the scale gate;
+  `scripts/vaisdb-relevance-report.sh` reports hits@1/hits@3/MRR100
+  for a curated query set against the live whole-repo index, with the
+  baseline snapshotted in docs/RELEVANCE-BASELINE.md — the first
+  capture quantifies `-all` at roughly double OR (MRR100 17 -> 37,
+  hits@1 0 -> 2 of 8) and names the residual weak class
+  (single-common-term queries where working notes legitimately
+  out-frequency the expected file).
+
 - `search` accepts a trailing `-all`: every query term must match a
   document for it to score (partial matches drop; OR stays the
   default). Survivors rank by rarity-weighted saturated counts — per

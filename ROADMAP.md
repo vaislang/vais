@@ -22,7 +22,27 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-08j) — 생존자 랭킹: `-all` 희귀-텀 가중 × TF 포화
+## 현재 작업 (2026-08-08k) — 릴레번스 하네스: 랭킹 품질의 측정자
+모드: 개별선택 (2026-08-08j 잔여: 추가 랭킹 품질은 질의-정답셋 필요)
+- [x] 1. test-vaisdb-relevance.sh ✅ 2026-08-08 — 미니 코퍼스 7문서 +
+      11어서션(top rows/동점 밴드/부분·노이즈 탈락/OR 보존/한국어) +
+      MRR100=70 플로어. 수치는 드라이런 캡처로 확정. 트랩: search
+      exit=톱스코어가 pipefail+errexit(expect의 set -e 누출)와 만나
+      $() 대입에서 스크립트 즉사 — 스코어-exit 명령의 대입은 `|| true`.
+- [x] 2. vaisdb-relevance-report.sh + RELEVANCE-BASELINE.md ✅ — 8쿼리
+      큐레이션, **첫 캡처: -all이 OR 대비 MRR100 17→37, hits@1 0→2**
+      (정량 입증). 잔여 약점 클래스 명명: 단일-common-텀 쿼리(fixpoint/
+      release gates — 워킹 노트가 정당하게 고빈도, bag-of-words 무대응
+      → 정의-사이트/필드 가중은 인덱스 포맷 작업 동반, 수요 대기).
+- [x] 3. gates.tasks 래더 편입 ✅ — vaisdb-relevance(풀 래더 = fmt +
+      perf + vaisdb-scale + vaisdb-relevance + release).
+- [x] 4. 문서/체인 ✅ — CHANGELOG/WORKLOG/RELEVANCE-BASELINE. 트랩:
+      워크플로 게이트의 gates.tasks 태스크-수 잠금(16)이 신규 태스크에
+      발화 — 17로 의식적 갱신(래더 편입 시 카운트 락 동반 갱신).
+      게이트: fmt/relevance/workflow/scale/release 전부 GREEN.
+진행률: 4/4 (100%) — **랭킹 작업의 측정자 확보, -all 가치 정량 입증**
+
+## 직전 완료 (2026-08-08j) — 생존자 랭킹: `-all` 희귀-텀 가중 × TF 포화
 모드: 개별선택 (2026-08-08i 잔여: 전-텀 보유 문서의 공통-토큰 지배)
 설계: 기본 OR 무변경, **`-all` 생존자 랭킹만** 정수 공식으로 교체 —
 기여 = qcount × rarity × min(dcount, 8), rarity = bit_len(N/df)

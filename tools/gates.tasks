@@ -7,6 +7,7 @@
 fmt = bash scripts/vaisfmt-check.sh
 perf = bash scripts/vaisbench-gate.sh 60000 2 bash scripts/test-vaisc-native.sh
 vaisdb-scale = bash scripts/vaisdb-scale-gate.sh
+vaisdb-relevance = bash scripts/test-vaisdb-relevance.sh
 front = bash scripts/test-vaisc-front.sh
 direct = bash scripts/test-vaisc-direct.sh
 check = bash scripts/test-vais-check-vais.sh
@@ -30,4 +31,4 @@ quick = /usr/bin/true
 # vaisdb-scale budget watches add seconds. The individual tasks above
 # remain for selective runs.
 ladder = /usr/bin/true
-!needs ladder fmt perf vaisdb-scale release
+!needs ladder fmt perf vaisdb-scale vaisdb-relevance release
