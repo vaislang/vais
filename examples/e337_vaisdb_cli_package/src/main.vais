@@ -754,13 +754,17 @@ fn self_test() -> Int {
     if doc_score(dir, "huge", hq) != 1 { return 80 }
 
     # -all semantics: a doc missing any query term zeroes out while
-    # survivors keep the plain contribution sum.
+    # survivors rank by rarity-weighted saturated counts. Here N=4
+    # (d1/d3/huge/half): ai matches d1+half (df=2, rarity
+    # bit_len(4/2)=2, d1 count 3 -> 6) and cache matches d1+d3 (df=2,
+    # rarity 2, d1 count 1 -> 2), so d1 scores 8 while half (ai only)
+    # zeroes out.
     if ingest_doc(dir, "half", "ai half body", "-") != 3 { return 84 }
     let aq: Map<Str,Int> = {}
     if doc_terms_guarded_into("ai cache", aq) != 2 { return 85 }
     let ascores: Map<Str,Int> = {}
     let afilled = query_scores_all_into(dir, aq, ascores)
-    if ascores.get("d1", 0) != 4 { return 86 }
+    if ascores.get("d1", 0) != 8 { return 86 }
     if ascores.get("half", 0) != 0 { return 87 }
 
     # Cross-index merge: hits from different indexes sort by score while

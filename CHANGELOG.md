@@ -5,16 +5,19 @@
 ### Added
 
 - `search` accepts a trailing `-all`: every query term must match a
-  document for it to score (partial matches drop; survivors keep the
-  plain contribution sum, and OR stays the default). This restores
-  specificity for identifier queries after compound splitting — on the
-  whole-repo corpus, `token_shard_at -all` ranks the defining module
-  first where the OR-sum had buried it under common split tokens.
-  Known remaining limit, recorded for demand: when a common-token-heavy
-  document genuinely contains every term (`str_slice_raw` and the
-  self-host compiler), the survivor ranking is still dominated by
-  common-token counts — rare-term weighting or saturation is the next
-  ranking step if practice demands it.
+  document for it to score (partial matches drop; OR stays the
+  default). Survivors rank by rarity-weighted saturated counts — per
+  term, contribution = query-count x rarity x min(doc-count, 8) with
+  rarity = bit_len(N / df) clamped to >= 1 (df = documents matching
+  the term, N = registered documents) — so identifier queries stay
+  specific after compound splitting and a common-token-heavy document
+  can no longer dominate survivors by volume alone: on the whole-repo
+  corpus `str_slice_raw -all` compresses from a 6,633-vs-98 spread to
+  a tied band of genuine all-term holders. Ranking remains
+  bag-of-words: documents that legitimately discuss an identifier at
+  length (working notes) can outrank its defining module, and further
+  quality work would need a relevance harness — recorded as a
+  demand-driven candidate.
 
 ### Changed
 

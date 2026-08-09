@@ -663,8 +663,8 @@ printf 'gate here alone\n' > "$tok_docs/tok2.txt"
 expect_exit "vaisdb -all corpus grows" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$tok_idx' '$tok_docs' | grep -qx 'reindexed added=1 updated=0 removed=0 skipped=1'"
 expect_exit "vaisdb search OR keeps partial matches" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$tok_idx' 'fixpoint gate' 3 | grep -q '^2\. tok2=1'"
 expect_exit "vaisdb search -all drops partial matches" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$tok_idx' 'fixpoint gate' 3 -all | grep -q 'tok2' && exit 1; exit 0"
-expect_exit "vaisdb search -all survivor keeps sum" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$tok_idx' 'fixpoint gate' 3 -all | grep -q '^1\. tok=3 '"
-expect_exit "vaisdb search -all exit is top score" 3 "$vdb_dist/bin/vaisdb" search "$tok_idx" "fixpoint gate" 3 -all
+expect_exit "vaisdb search -all ranks by rarity-weighted counts" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$tok_idx' 'fixpoint gate' 3 -all | grep -q '^1\. tok=5 '"
+expect_exit "vaisdb search -all exit is top score" 5 "$vdb_dist/bin/vaisdb" search "$tok_idx" "fixpoint gate" 3 -all
 rm "$reindex_docs/r2.txt"
 expect_exit "vaisdb reindex removes deleted docs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=0 removed=1 skipped=1'"
 expect_exit "vaisdb reindex removed doc leaves search" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$reindex_idx' gamma 2 | cmp -s - /dev/null"

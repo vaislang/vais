@@ -22,7 +22,28 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-08i) — 랭킹 특이성: search `-all` 전-텀-필수 모드
+## 현재 작업 (2026-08-08j) — 생존자 랭킹: `-all` 희귀-텀 가중 × TF 포화
+모드: 개별선택 (2026-08-08i 잔여: 전-텀 보유 문서의 공통-토큰 지배)
+설계: 기본 OR 무변경, **`-all` 생존자 랭킹만** 정수 공식으로 교체 —
+기여 = qcount × rarity × min(dcount, 8), rarity = bit_len(N/df)
+(df = 텀 매치 문서 수, 스캔의 tscores.len()이 공짜 제공; N = 등록 문서
+수; clamp ≥1 — 고아 포스팅으로 df>N 가능). df=0 텀은 skip(해당 쿼리
+자연 전멸). 포화 캡 8 = 2^3, 상한 bit_len ≤ ~10이라 오버플로 무관.
+- [x] 1. query_scores_all_into 랭킹 교체 ✅ 2026-08-08 — bit_len 헬퍼 +
+      스캔 weight 1(raw counts), fold에서 qcount×rarity×sat(캡 8).
+- [x] 2. 계약 갱신 ✅ — workflow(tok=5)/exit 5, self-test 86 재계산
+      트랩: 손계산 N=3이 오답 — d3("vector vector cache")가 cache 보유
+      +레지스트리 4문서(d1/d3/huge/half) → d1=8. 픽스처 수치는 자기
+      손계산 말고 **테스트 실행이 판정**(86 발화로 즉시 교정).
+- [x] 3. repo 실코퍼스 검증 ✅ — str_slice_raw: 6,633-vs-98 스프레드 →
+      전-텀 실보유자 동점 밴드(80)로 압축(목표 달성). token_shard_at:
+      정의 모듈 5위 97점 — 상위 4개는 그 식별자를 다량 기술한 오늘
+      워킹 노트/게이트 파일(bag-of-words로 방어 가능). **추가 품질은
+      릴레번스 하네스(질의-정답셋) 필요 — 수요 대기 후보로 기록.**
+진행률: 3/3 (100%) — 게이트: fmt/front/test.sh 410/parity 410/scale/
+release 전부 GREEN
+
+## 직전 완료 (2026-08-08i) — 랭킹 특이성: search `-all` 전-텀-필수 모드
 모드: 개별선택 (2026-08-08h 환류: 식별자 쿼리가 공통 토큰 OR-합산에 묻힘)
 설계: IDF-류 가중은 전 스코어 계약 churn + 정수 랭킹 품질 늪이라 기각,
 **옵트인 `-all`**(기본 의미론 무변경, 명확성 원칙) 채택.
