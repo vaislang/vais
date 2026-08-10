@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.3.0 - 2026-08-10
+
 ### Added
 
 - `bench-vaisdb-corpus.sh` gains a `search -all` timing row, and

@@ -22,7 +22,26 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-08k) — 릴레번스 하네스: 랭킹 품질의 측정자
+## 현재 작업 (2026-08-10) — v1.3.0 컷 + vaislisp 사이클(대화형 호스트 승격)
+모드: 개별선택 (사용자 방향: DB보다 "프로그램적" 제작 — 인터프리터 채택)
+- [x] 1. v1.3.0 컷 ✅ 2026-08-10 — v1.2.0 이후 8커밋 회전(재귀 -r/4096
+      창 제거/비단어 토크나이저(인덱스 재구축 고지)/similar 파티션/top
+      -min/-all 희귀-텀 랭킹/릴레번스 하네스/전체-repo 검색기). release
+      게이트 GREEN 후 태그·푸시.
+- [ ] 2. 호스트 승격 2건 — stdin_read_line() -> Str(fgets 계약: 개행
+      포함 라인, "" = EOF — 총함수; stdin_read_all 0-인자 Str 템플릿,
+      fixpoint is_host_str_return 테이블 + core 재생성) +
+      time_sleep_millis(ms) -> Int(fs_mtime 템플릿, core 무변경).
+      예제 + parity + 문서. 수요 원천 = 3번의 REPL.
+- [ ] 3. vaislisp — 정수 Lisp 인터프리터 패키지(사칙/비교/if/define/
+      defun/while/print, 토큰-스팬 워킹 평가기(AST 없이 (값,next) 튜플
+      재귀), env = Map<Str,Int> save/restore 프레임), REPL(stdin_read_
+      line 루프) + 파일 모드. self-test + 워크플로 게이트 파이프 케이스.
+      장수 루프의 arena-누수 체감 첫 실측 겸용.
+- [ ] 4. 문서/체인/커밋·푸시.
+진행률: 0/4
+
+## 직전 완료 (2026-08-08k) — 릴레번스 하네스: 랭킹 품질의 측정자
 모드: 개별선택 (2026-08-08j 잔여: 추가 랭킹 품질은 질의-정답셋 필요)
 - [x] 1. test-vaisdb-relevance.sh ✅ 2026-08-08 — 미니 코퍼스 7문서 +
       11어서션(top rows/동점 밴드/부분·노이즈 탈락/OR 보존/한국어) +
