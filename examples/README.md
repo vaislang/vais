@@ -296,7 +296,8 @@ variable argument passthrough),
 `examples/e354_vaiswc_package` for the installable vaiswc line/word/byte
 counter (multi-source `total` row, stdin via `-`, `str_split_ws_into` words),
 `examples/e355_vaisbox_package` for the installable vaisbox multicall
-dispatcher (proc_self basename applet selection, sibling re-exec, `list`),
+dispatcher (proc_self basename applet selection, sibling re-exec, `list`,
+fourteen-applet roster including vaislisp),
 `examples/e357_vaissort_package` for the installable vaissort line sorter
 (`List<Str>.sort` over multi-source lines, `-u` adjacent unique, `-r` reverse),
 `examples/e358_env_get_host_read.vais` for total environment variable reads

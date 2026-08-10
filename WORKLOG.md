@@ -1,5 +1,14 @@
 # Vais Worklog
 
+## 2026-08-11b (vaisbox 로스터 — vaislisp 14번째 applet)
+
+로스터 문자열에 vaislisp 추가(13→14), 셀프테스트는 멤버십+names[13]
++카운트 검사에 산술을 13*3+3에서 **14*3=42**로. 워크플로 게이트는
+vaislisp 빌드 블록(주석 포함 15줄)을 vaisbox 절 앞으로 이동해 단일
+빌드를 유지하고, sibling cp + `list | wc -l` 14 락 + `vaisbox
+vaislisp repl` 디스패치 케이스 추가. 다른 카운트 락 없음(gates.tasks
+는 래더 태스크 수만 잠금 — 이번 사이클 래더 무변경).
+
 ## 2026-08-11 (한줄 fn 본문 갭 — 평탄 지원 + 불가형 front 거부)
 
 **결정: silent 없는 양분**. 평탄 한줄 본문(`fn f() -> Int { 40 }`,

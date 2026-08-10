@@ -4,6 +4,12 @@
 
 ### Added
 
+- vaisbox dispatches vaislisp: the roster grows from thirteen to
+  fourteen applets, `vaisbox vaislisp repl` reaches the interpreter
+  through the multicall path, and the package self-test moves to the
+  fourteen-name table (14 * 3 = 42). The workflow gate builds the
+  vaislisp dist before the vaisbox section and adds a dispatch case.
+
 - vaislisp surface expansion: strings, lists, and first-class lambdas
   over a tagged-Int value encoding that keeps the evaluator's
   (value, next) tuple contract — plain numbers live inside +/-1e15,

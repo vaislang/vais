@@ -22,7 +22,18 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-11) — 한줄 fn 본문 갭 처리: 평탄 지원 + 불가형 front 거부
+## 현재 작업 (2026-08-11b) — vaisbox 로스터 편입: vaislisp 14번째 applet
+모드: 개별선택 (등록 후보 중 유일 비-수요-대기 건 소화)
+- [x] 1. 로스터+셀프테스트 ✅ 2026-08-11 — roster 14명(vaislisp 추가),
+      멤버십/names[13] 검사, 산술 14*3=42로 갱신.
+- [x] 2. 게이트 ✅ — vaislisp 빌드 블록을 vaisbox 절 앞으로 이동(단일
+      빌드 유지), sibling cp + list count 14 + dispatch vaislisp repl
+      케이스. 워크플로 게이트 GREEN.
+- [x] 3. 문서 + 래더 ✅ — PRELUDE/examples README/CHANGELOG, fmt/
+      workflow/test.sh 414/parity 414/release 전부 GREEN.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-08-11) — 한줄 fn 본문 갭 처리: 평탄 지원 + 불가형 front 거부
 모드: 개별선택 (2026-08-10b 등록 후보 즉시 소화 — silent 갭 근절)
 결정: **평탄 한줄 본문은 지원**(분할 정규화), **불가형은 front 거부**
 — 어느 경로에도 silent 없음.

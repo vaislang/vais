@@ -132,7 +132,8 @@ is a busybox-style multicall dispatcher — it runs a sibling `dist/bin/<tool>`
 chosen from `proc_self()`'s basename when that names a known applet, or from
 the first argument (`vaisbox <tool> [args...]`, plus `vaisbox list`). It
 refuses to re-exec itself or a missing sibling (exit 3), so argv[0] dispatch
-requires the sibling binary to exist next to it.
+requires the sibling binary to exist next to it. The roster spans fourteen
+applets — the thirteen text tools plus the vaislisp interpreter.
 `examples/e354_vaiswc_package` is the seventh installable tool: `vaiswc`
 counts lines, words, and bytes over one or more sources (`-` for stdin),
 printing `L W B path` per source and a summed `total` row for two or more —
