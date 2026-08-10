@@ -41,8 +41,10 @@ This file tracks current work and completed gate-backed language surface.
 - [x] 3. 예제+도그푸드 ✅ — e395(tail-식/Str 리터럴/`;`-결합, expect
       42, parity 등록, FULL=DIRECT=42). vaislisp 밴드 상수를 한줄
       표기로 복원(살아있는 증명, PKG=0/SELFTEST=42).
-- [ ] 4. 전체 래더 + 커밋/푸시
-진행률: 3/4 (75%)
+- [x] 4. 전체 래더 + 커밋/푸시 ✅ 2026-08-11 — fmt/front/direct/
+      fixpoint-full/test.sh 414/parity 414/self-host/release 전부
+      GREEN, d1ced0d8 푸시.
+진행률: 4/4 (100%)
 
 ## 직전 완료 (2026-08-10b) — vaislisp 표면 확장: 문자열·리스트·lambda
 모드: 개별선택 (프로그램형 도그푸딩 2라운드)
