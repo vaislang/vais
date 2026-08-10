@@ -28,18 +28,24 @@ This file tracks current work and completed gate-backed language surface.
       창 제거/비단어 토크나이저(인덱스 재구축 고지)/similar 파티션/top
       -min/-all 희귀-텀 랭킹/릴레번스 하네스/전체-repo 검색기). release
       게이트 GREEN 후 태그·푸시.
-- [ ] 2. 호스트 승격 2건 — stdin_read_line() -> Str(fgets 계약: 개행
-      포함 라인, "" = EOF — 총함수; stdin_read_all 0-인자 Str 템플릿,
-      fixpoint is_host_str_return 테이블 + core 재생성) +
-      time_sleep_millis(ms) -> Int(fs_mtime 템플릿, core 무변경).
-      예제 + parity + 문서. 수요 원천 = 3번의 REPL.
-- [ ] 3. vaislisp — 정수 Lisp 인터프리터 패키지(사칙/비교/if/define/
-      defun/while/print, 토큰-스팬 워킹 평가기(AST 없이 (값,next) 튜플
-      재귀), env = Map<Str,Int> save/restore 프레임), REPL(stdin_read_
-      line 루프) + 파일 모드. self-test + 워크플로 게이트 파이프 케이스.
-      장수 루프의 arena-누수 체감 첫 실측 겸용.
-- [ ] 4. 문서/체인/커밋·푸시.
-진행률: 0/4
+- [x] 2. 호스트 승격 2건 ✅ 2026-08-10 — stdin_read_line() -> Str(fgets
+      계약, ""=EOF; fixpoint is_host_str_return + core 재생성, 이번엔
+      gen1==gen2 즉시 수렴 — 프리루드 무변경·컴파일러 추론만 변경 케이스)
+      + time_sleep_millis(ms) -> Int(core 무변경). e392 잠금(+양 엔진
+      파이프 프로브 43). **stdin_read_line은 bare 코퍼스 예제 의도적
+      부재**(터미널 실행 게이트가 블로킹) — 파이프 게이트 케이스가 커버.
+- [x] 3. vaislisp ✅ — e393 패키지(self-test 12케이스 42, fib(10)=55/
+      fact/동적 스코프 복원), REPL(라인 간 defun 지속) + 파일 모드
+      (exit=마지막 값, fib(20)=6765 게이트). 워크플로 게이트 +7.
+      **경유 컴파일러 갭 root-fix**: 튜플-반환 본문 내 구조분해가
+      미로워링(본문 분기가 return-로워링만 소비) → 구조분해 시도 선행
+      삽입, e394 잠금(자기재귀+교차함수). 트랩: 튜플 구조분해 RHS는
+      `@` 불가·명명 호출만(로워링 계약).
+- [x] 4. 문서/체인 ✅ — PRELUDE/LANGUAGE(튜플 본문 구조분해 명기)/
+      examples README/CHANGELOG. 풀 래더: fmt/front/direct/fixpoint-full/
+      test.sh 413/parity native=413/self-host/relevance/release 전부
+      GREEN.
+진행률: 4/4 (100%) — **첫 프로그램형 제품 + 대화형 호스트 슬라이스 개통**
 
 ## 직전 완료 (2026-08-08k) — 릴레번스 하네스: 랭킹 품질의 측정자
 모드: 개별선택 (2026-08-08j 잔여: 추가 랭킹 품질은 질의-정답셋 필요)

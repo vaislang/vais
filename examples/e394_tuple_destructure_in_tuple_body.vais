@@ -1,0 +1,32 @@
+# expect: 42
+# Tuple destructuring works inside tuple-returning function bodies —
+# self-recursion included. The tuple lowering used to consume body
+# lines for return rewriting only, so `let (a, b) = f(...)` inside a
+# tuple function survived unlowered and was rejected at the front (the
+# vaislisp evaluator's (value, next) recursion found the gap).
+fn split_sum(n: Int) -> (Int, Int) {
+    if n > 100 {
+        let (lo, hi) = split_sum(n - 100)
+        return (lo + 1, hi + 1)
+    }
+    return (n, n + 1)
+}
+
+fn helper_pair(a: Int) -> (Int, Str) {
+    return (a, "x")
+}
+
+fn cross(n: Int) -> (Int, Int) {
+    let (v, s) = helper_pair(n)
+    return (v + s.len(), v)
+}
+
+fn main() -> Int {
+    let (a, b) = split_sum(120)
+    if a != 21 { return 1 }
+    if b != 22 { return 2 }
+    let (c, d) = cross(9)
+    if c != 10 { return 3 }
+    if d != 9 { return 4 }
+    return a + b - 1
+}

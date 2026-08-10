@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+### Added
+
+- Interactive host slice, demanded by the vaislisp REPL:
+  `stdin_read_line() -> Str` returns the next stdin line including its
+  trailing newline (fgets shape; `""` means EOF, so an empty input
+  line still carries `\n`) on both engines — the full core regenerated
+  through the generation loop for its Str-return inference — and
+  `time_sleep_millis(ms: Int) -> Int` sleeps at least the requested
+  wall time with a total zero-return contract
+  (examples/e392_time_sleep_millis.vais; stdin_read_line deliberately
+  has no bare corpus example, since a terminal-run gate would block —
+  piped workflow-gate cases cover it).
+
+- vaislisp (examples/e393_vaislisp_package): an installable integer
+  Lisp interpreter and the first "program-shaped" product — token-span
+  evaluation with no AST (the evaluator recurses on (value, next)
+  tuple cursors over one token list), arithmetic/comparison forms,
+  if/while/begin/print, define/set over one environment map, and defun
+  with dynamic save/restore parameter frames so recursion unwinds
+  correctly (fib(20) = 6765 in the gate). Modes: deterministic
+  self-test, file evaluation whose exit is the last value, and a
+  stdin_read_line REPL with cross-line defun persistence.
+
+### Fixed
+
+- Tuple destructuring now lowers inside tuple-returning function
+  bodies — self-recursion included. The tuple lowering consumed every
+  body line for return rewriting only, so `let (a, b) = f(...)` inside
+  a tuple function survived unlowered and hit the front rejection; the
+  vaislisp evaluator's recursive (value, next) shape found the gap,
+  and examples/e394_tuple_destructure_in_tuple_body.vais locks the
+  self-recursive and cross-function cases on both engines.
+
 ## v1.3.0 - 2026-08-10
 
 ### Added

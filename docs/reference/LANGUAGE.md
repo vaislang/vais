@@ -204,7 +204,7 @@ Verified release surface:
 | `Result<Str,Str>` | First non-Int error payload slice: `Ok(Str)`/`Err(Str)` so failures carry human-readable messages, helper returns, local-binding `?` propagation, and inline match recovery of either the `Str` value or the `Str` error message to a `Str` or its `Int` length. Verified in the native direct engine and the full self-host compiler; used by the VaisDB ingest workflow in `examples/e330_vaisdb_ingest_error_message_flow.vais` |
 | `Result<Metric,Int>` | First structured payload slice: `Ok(Metric)`/`Err(Int)`, helper returns, helper parameters/forwarding, and inline match recovery of `Metric` fields to `Int` |
 | `Result<DeclaredStruct,Int>` | Verified for declared struct payloads such as Int-field `Record`, multiline `Entry`, Str-field `DocSummary`, and VaisDB `DocArtifact`: helper returns, helper parameters/forwarding, direct call-argument use of Result-returning helpers, explicit wrapper payload local copies, local-binding `?`, `List<Struct>` output storage, persisted store reload parsing, inline match recovery of multiple struct fields or string field lengths to `Int`, direct `Str` field recovery to string locals, nested `str_concat(...)` composition of `Str` fields, `str_replace`/`str_trim`/`str_upper`/`str_lower` normalization in match arms, transformed string `.len()` scoring in `Int` arms, `Ok` payload handoff to reusable `Int` scoring helpers, helper-call terms composed with normal payload fields, and Bool returns from payload helper terms plus `Err(Int)` comparisons |
-| `(T1, T2)` tuple of Int/Str | Function return and local destructuring slice lowered through generated structs |
+| `(T1, T2)` tuple of Int/Str | Function return and local destructuring slice lowered through generated structs, including destructures inside tuple-returning bodies (self-recursive and cross-function) |
 | Simple `struct` | Literal construction including multiline local initialization, same-type local assignment, call arguments, `Str` fields, and direct helper returns for nested literals, field access including `Str` field equality/helper/`.len()` use and struct-returning helper field-chain reads, local field write, single-field nested struct read/write including direct flattening for previously declared single-Int-field nested structs, scalar multi-field nested struct local literals/direct returns/field-chain reads, helper parameters, helper returns, helper-return assignment, generic marker syntax used with `Int` values, generic identity helpers applied to struct literals, simple `impl` method return chains, and simple `trait` plus `impl Trait for Struct` method calls |
 | Small `enum` | Payload-free enum/match, payload enum wildcard match, small recursive `Int` payload enum/match, single-field struct payload enum/match, and single `Option<Int>` payload enum with a nested Option match arm |
 
@@ -2011,6 +2011,7 @@ process intrinsics. The current and planned broader surface is:
 fs_exists(path: Str) -> Bool
 fs_is_dir(path: Str) -> Int
 stdin_read_all() -> Str
+stdin_read_line() -> Str
 stdout_write(text: Str) -> Int
 stderr_write(text: Str) -> Int
 proc_self() -> Str
@@ -2062,7 +2063,7 @@ proc_capture(argv: List<Str>) -> ProcessResult
 `path_basename(path: Str) -> Str`, `path_dirname(path: Str) -> Str`,
 `str_concat(left: Str, right: Str) -> Str`, `str_slice(text: Str, start: Int,
 len: Int) -> Str`, `str_byte(value: Int) -> Str`, and
-`time_millis() -> Int` are gate-backed by
+`time_millis() -> Int` and `time_sleep_millis(ms: Int) -> Int` are gate-backed by
 `scripts/test-vaisc-host.sh` for `scripts/vaisc build` and `scripts/vaisc run`;
 `str_concat`, `str_slice`, and `str_byte` are checked there as self-contained
 helper calls in generated IR rather than external host calls.

@@ -1,0 +1,15 @@
+# expect: 42
+# time_sleep_millis(ms) -> Int sleeps for at least the requested wall
+# time (0 = success; non-positive requests return immediately), locked
+# against time_millis deltas with generous tolerance so the gate stays
+# deterministic on loaded machines.
+fn main() -> Int {
+    let r0 = time_sleep_millis(0 - 5)
+    if r0 != 0 { return 1 }
+    let t0 = time_millis()
+    let r1 = time_sleep_millis(60)
+    if r1 != 0 { return 2 }
+    let t1 = time_millis()
+    if t1 - t0 < 45 { return 3 }
+    return 42
+}

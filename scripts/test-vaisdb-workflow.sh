@@ -665,6 +665,19 @@ expect_exit "vaisdb search OR keeps partial matches" 0 /bin/sh -c "'$vdb_dist/bi
 expect_exit "vaisdb search -all drops partial matches" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$tok_idx' 'fixpoint gate' 3 -all | grep -q 'tok2' && exit 1; exit 0"
 expect_exit "vaisdb search -all ranks by rarity-weighted counts" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$tok_idx' 'fixpoint gate' 3 -all | grep -q '^1\. tok=5 '"
 expect_exit "vaisdb search -all exit is top score" 5 "$vdb_dist/bin/vaisdb" search "$tok_idx" "fixpoint gate" 3 -all
+
+# vaislisp: the integer Lisp interpreter package — self-test, a piped
+# stdin_read_line REPL with cross-line defun persistence, and file mode
+# whose exit code is the last top-level value.
+lisp_dist="$tmp/vaislisp-dist"
+rm -rf "$lisp_dist"
+expect_exit "vaislisp package build" 0 "$ROOT/scripts/vaisc" package "$ROOT/examples/e393_vaislisp_package" -o "$lisp_dist"
+expect_exit "vaislisp package self-test" 42 /bin/sh -c "'$lisp_dist/bin/vaislisp' < /dev/null"
+expect_exit "vaislisp repl evaluates piped lines" 0 /bin/sh -c "printf '(+ 1 2)\n(define x 40)\n(+ x 2)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
+expect_exit "vaislisp repl defun persists across lines" 0 /bin/sh -c "printf '(defun inc (n) (+ n 1))\n(inc 41)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
+expect_exit "vaislisp file mode prints fib" 0 /bin/sh -c "printf '(defun fib (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))\n(print (fib 20))\n42\n' > '$tmp/lisp-fib.lisp'; '$lisp_dist/bin/vaislisp' '$tmp/lisp-fib.lisp' | grep -qx '6765'"
+expect_exit "vaislisp file mode exit is last value" 42 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$tmp/lisp-fib.lisp' >/dev/null"
+expect_exit "vaislisp missing file errors" 3 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$tmp/lisp-none.lisp' >/dev/null"
 rm "$reindex_docs/r2.txt"
 expect_exit "vaisdb reindex removes deleted docs" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' reindex '$reindex_idx' '$reindex_docs' | grep -qx 'reindexed added=0 updated=0 removed=1 skipped=1'"
 expect_exit "vaisdb reindex removed doc leaves search" 0 /bin/sh -c "'$vdb_dist/bin/vaisdb' search '$reindex_idx' gamma 2 | cmp -s - /dev/null"

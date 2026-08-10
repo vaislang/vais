@@ -312,6 +312,7 @@ direct/default summary report.
 | `fs_exists(path: Str) -> Bool` | Verified |
 | `fs_is_dir(path: Str) -> Bool` | Verified; full/direct — directory test (missing paths yield 0) |
 | `stdin_read_all() -> Str` | Verified; full/direct — read standard input to EOF (empty input yields "") |
+| `stdin_read_line() -> Str` | Verified; full/direct — next stdin line including its trailing newline (fgets shape); `""` means EOF, so an empty input line still carries `\n`. No bare corpus example by design (a terminal-run gate would block); covered by piped workflow-gate cases |
 | `stdout_write(text: Str) -> Int` | Verified; full/direct — raw stdout write, no added newline (returns bytes written) |
 | `stderr_write(text: Str) -> Int` | Verified; full/direct — raw stderr write, no added newline (returns bytes written) |
 | `proc_self() -> Str` | Verified; full/direct — running program path (argv[0]) for multicall dispatch |
@@ -352,6 +353,7 @@ direct/default summary report.
 | `fs_list_files(dir: Str, out: List<Str>) -> Int` | Verified; full/direct — sorted regular-file names, subdirectories skipped, missing directory yields 0 |
 | `fs_list_dirs(dir: Str, out: List<Str>) -> Int` | Verified; full/direct — sorted subdirectory names, regular files skipped, missing directory yields 0 |
 | `time_millis() -> Int` | Verified; full/direct |
+| `time_sleep_millis(ms: Int) -> Int` | Verified; full/direct — sleeps at least `ms` wall milliseconds (0 = success, non-positive returns immediately) |
 | `proc_argc() -> Int` | Verified |
 | `proc_arg(index: Int) -> Str` | Verified |
 | `proc_run(argv: List<Str>) -> Int` | Verified |

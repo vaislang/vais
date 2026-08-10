@@ -393,6 +393,13 @@ surface — tuple returns parse the flag pair and carry the leader row, and
 `examples/e391_fs_rename_atomic_swap.vais` for `fs_rename` moves, atomic
 replacement of existing targets, nonzero missing-source failure, and the
 temp-then-rename atomic rewrite idiom,
+`examples/e392_time_sleep_millis.vais` for `time_sleep_millis` wall-clock
+sleeps with a total zero-return contract,
+`examples/e393_vaislisp_package` for the installable vaislisp integer Lisp
+interpreter — token-span evaluation through `(value, next)` tuple recursion,
+defun save/restore frames, a `stdin_read_line` REPL, and file mode,
+`examples/e394_tuple_destructure_in_tuple_body.vais` for tuple destructures
+inside tuple-returning bodies (self-recursive and cross-function),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

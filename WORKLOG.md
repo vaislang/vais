@@ -1,5 +1,32 @@
 # Vais Worklog
 
+## 2026-08-10 (v1.3.0 + vaislisp — 첫 "프로그램형" 제품과 대화형 호스트 슬라이스)
+
+**v1.3.0 태그**(9dd771ec, v1.2.0 이후 8커밋 회전, release GREEN 후
+태그·푸시). 이어서 사용자 방향 전환(DB보다 "프로그램적" 제작) 반영:
+
+**호스트 승격 2건**: stdin_read_line() -> Str(fgets 계약 — 개행 포함
+라인, ""=EOF 총함수; fixpoint is_host_str_return 테이블 + core 재생성,
+이번엔 gen1==gen2 즉시 수렴 — 프리루드 무변경·추론만 변경 케이스) +
+time_sleep_millis(ms) -> Int(core 무변경 적중). e392 잠금.
+stdin_read_line은 **bare 코퍼스 예제 의도적 부재**(터미널 실행 게이트
+블로킹 위험) — 파이프 워크플로 게이트가 커버, PRELUDE에 사유 명기.
+
+**vaislisp**(e393 패키지): 정수 Lisp 인터프리터 — AST 없이 토큰-스팬
+위를 (value, next) 튜플 재귀로 걷는 평가기, 사칙/비교/if/while/begin/
+print/define/set/defun(동적 save-restore 파라미터 프레임 — 재귀 정상
+언와인드). self-test 12케이스(fib(10)=55, fact, 섀도 복원), REPL(라인
+간 defun 지속) + 파일 모드(exit=마지막 값, fib(20)=6765). 워크플로
+게이트 +7.
+
+**경유 컴파일러 갭 root-fix**: 튜플-반환 함수 본문 내 구조분해가
+미로워링 — lower_tuple_text의 본문 분기가 return-로워링만 소비하고
+continue라 `let (a,b) = f(...)`가 본문 안에서 front 거부로 표면(자기
+재귀 포함 전 케이스). 구조분해 시도를 본문 분기 선두에 삽입, e394
+잠금(자기재귀+교차함수 both engines). 트랩 2건: ① 튜플 구조분해 RHS는
+`@` 불가·명명 호출만(로워링이 이름 요구) ② 격리 프로브 기대값 산수
+실수(41을 42로) — 양 엔진 일치가 정답 판정 기준.
+
 ## 2026-08-08k (릴레번스 하네스 — 랭킹 품질의 측정자)
 
 2층 구조: ① **test-vaisdb-relevance.sh**(결정적 회귀 게이트) — 역할

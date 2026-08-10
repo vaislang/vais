@@ -417,3 +417,6 @@ examples/e328_cli_package_assets/src/main.vais	native-supported	Package assets e
 examples/e337_vaisdb_cli_package/src/main.vais	native-supported	Installable vaisdb CLI package self-test keeps the multi-module package entry aligned with file-entry execution.
 examples/e390_vaisfreq_package/src/main.vais	native-supported	Installable vaisfreq top-K word-frequency tool dogfoods the Stage 3c surface: mixed tuple returns for flag parsing and the leader row, and take(k) as the report semantic over sorted struct rows.
 examples/e391_fs_rename_atomic_swap.vais	native-supported	fs_rename moves and atomically replaces files with nonzero missing-source failure, backing the temp-then-rename atomic rewrite idiom.
+examples/e392_time_sleep_millis.vais	native-supported	time_sleep_millis sleeps at least the requested wall time with a total zero-return contract and immediate return on non-positive requests.
+examples/e393_vaislisp_package/src/main.vais	native-supported	Installable vaislisp integer Lisp interpreter: token-span evaluation through (value, next) tuple recursion, defun save/restore frames, a stdin_read_line REPL, and file mode.
+examples/e394_tuple_destructure_in_tuple_body.vais	native-supported	Tuple destructuring lowers inside tuple-returning bodies, self-recursive and cross-function alike.
