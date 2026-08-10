@@ -395,9 +395,12 @@ replacement of existing targets, nonzero missing-source failure, and the
 temp-then-rename atomic rewrite idiom,
 `examples/e392_time_sleep_millis.vais` for `time_sleep_millis` wall-clock
 sleeps with a total zero-return contract,
-`examples/e393_vaislisp_package` for the installable vaislisp integer Lisp
-interpreter — token-span evaluation through `(value, next)` tuple recursion,
-defun save/restore frames, a `stdin_read_line` REPL, and file mode,
+`examples/e393_vaislisp_package` for the installable vaislisp Lisp
+interpreter — token-span evaluation through `(value, next)` tuple recursion
+over tagged-Int values (numbers, pooled strings, cons lists, first-class
+lambdas with higher-order application), defun save/restore frames, a
+`stdin_read_line` REPL with definition-preserving token rollback, and file
+mode,
 `examples/e394_tuple_destructure_in_tuple_body.vais` for tuple destructures
 inside tuple-returning bodies (self-recursive and cross-function),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a

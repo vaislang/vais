@@ -1,17 +1,73 @@
 # expect: 42
-# vaislisp: an integer Lisp interpreter over token spans — no AST, the
-# evaluator walks the token list recursively and returns (value, next)
-# tuples, so the whole tree lives as `(Int, Int)` cursor math over one
-# List<Str>. Surface: (+ - * / < > =), (if c a b), (define name e),
-# (set name e), (defun name (params...) body), (while c body...),
-# (begin e...), (print e). Values are Int; 0 is false, anything else is
-# true. defun calls bind parameters dynamically with save/restore
-# frames over one global Map<Str,Int>, so recursion unwinds correctly.
+# vaislisp: a Lisp interpreter over token spans — no AST, the evaluator
+# walks the token list recursively and returns (value, next) tuples.
+# Values are tagged Ints so the (Int, Int) tuple contract carries every
+# type: plain numbers live inside +/-1e15, string values index a global
+# pool at the STR band, cons cells index parallel car/cdr heaps at the
+# CONS band, function values index the defun/lambda table at the FN
+# band, and nil is one reserved constant. Arithmetic outside the number
+# band reports a loud error and yields 0.
+#
+# Surface: (+ - * / < > =), (if c a b), (define name e), (set name e),
+# (defun name (params...) body), (lambda (params...) body) as a
+# first-class value — applications evaluate the head, so higher-order
+# calls and immediate calls work — (while c body...), (begin e...),
+# (print e), string literals "..." with str-len / str-cat, and lists
+# via cons / car / cdr / list / null? / nil. Scoping is dynamic with
+# save/restore parameter frames (lambdas do not capture lexically).
+#
 # Modes: no arguments runs the deterministic self-test (the
 # release-corpus entry), `vaislisp <file.lisp>` evaluates a file and
 # exits with the last value, `vaislisp repl` reads stdin lines until
-# EOF (the demand source for the stdin_read_line promotion) and prints
-# each top-level value.
+# EOF and prints each top-level value.
+
+fn int_band() -> Int {
+    1000000000000000
+}
+
+fn str_base() -> Int {
+    2000000000000000
+}
+
+fn cons_base() -> Int {
+    3000000000000000
+}
+
+fn fn_base() -> Int {
+    4000000000000000
+}
+
+fn nil_val() -> Int {
+    6000000000000000
+}
+
+fn is_num_val(v: Int) -> Int {
+    if v < int_band() {
+        if v > 0 - int_band() { return 1 }
+    }
+    0
+}
+
+fn is_str_val(v: Int) -> Int {
+    if v >= str_base() {
+        if v < cons_base() { return 1 }
+    }
+    0
+}
+
+fn is_cons_val(v: Int) -> Int {
+    if v >= cons_base() {
+        if v < fn_base() { return 1 }
+    }
+    0
+}
+
+fn is_fn_val(v: Int) -> Int {
+    if v >= fn_base() {
+        if v < 5000000000000000 { return 1 }
+    }
+    0
+}
 
 fn is_ws(c: Int) -> Int {
     if c == 32 or c == 9 or c == 10 or c == 13 { return 1 }
@@ -19,8 +75,9 @@ fn is_ws(c: Int) -> Int {
 }
 
 # Tokenize source into toks: parens as single tokens, `;` comments to
-# end of line, atoms as non-ws non-paren runs (field-copy via builder
-# keeps the copy O(token)).
+# end of line, `"..."` string literals kept whole including the quotes
+# (spaces and parens inside stay in the token), atoms as remaining
+# runs.
 fn tokenize_into(src: Str, toks: List<Str>) -> Int {
     let n = src.len()
     let mut pos = 0
@@ -42,17 +99,33 @@ fn tokenize_into(src: Str, toks: List<Str>) -> Int {
                 if src[pos] == 10 { break }
                 pos += 1
             }
+        } else if c == 34 {
+            let start = pos
+            pos += 1
+            while pos < n {
+                if src[pos] == 34 { break }
+                pos += 1
+            }
+            if pos < n { pos += 1 }
+            let bq = str_builder_new()
+            let mut qi = start
+            while qi < pos {
+                let pushed = str_builder_push(bq, src[qi])
+                qi += 1
+            }
+            toks.push(str_builder_finish(bq))
+            count += 1
         } else {
             let start = pos
             while pos < n {
                 let b = src[pos]
-                if is_ws(b) == 1 or b == 40 or b == 41 or b == 59 { break }
+                if is_ws(b) == 1 or b == 40 or b == 41 or b == 59 or b == 34 { break }
                 pos += 1
             }
             let b2 = str_builder_new()
             let mut i = start
             while i < pos {
-                let pushed = str_builder_push(b2, src[i])
+                let pushed2 = str_builder_push(b2, src[i])
                 i += 1
             }
             toks.push(str_builder_finish(b2))
@@ -96,15 +169,103 @@ fn skip_expr(toks: List<Str>, pos: Int) -> Int {
     p
 }
 
-# Evaluate one expression at pos; returns (value, next-pos). genv is
-# the single environment map, and the defun tables map names to token
-# indexes (param-list start / body start) inside the same token list.
-fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>) -> (Int, Int) {
+# Intern a string into the pool and return its tagged value.
+fn intern_str(s: Str, spool: List<Str>) -> Int {
+    spool.push(s)
+    str_base() + spool.len() - 1
+}
+
+# Render a value for printing: pool strings verbatim, cons chains as
+# "(a b c)" with a dotted tail when the cdr is not nil or a cons,
+# functions as "<fn>", nil as "nil", numbers as digits.
+fn print_value(v: Int, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> Str {
+    if v == nil_val() { return "nil" }
+    if is_str_val(v) == 1 { return spool[v - str_base()] }
+    if is_fn_val(v) == 1 { return "<fn>" }
+    if is_cons_val(v) == 1 {
+        let b = str_builder_new()
+        let o1 = str_builder_append(b, "(")
+        let mut cur = v
+        let mut first = 1
+        let mut going = 1
+        while going == 1 {
+            if first == 0 {
+                let sp = str_builder_append(b, " ")
+            }
+            first = 0
+            let o2 = str_builder_append(b, @(cars[cur - cons_base()], spool, cars, cdrs))
+            let nxt = cdrs[cur - cons_base()]
+            if nxt == nil_val() {
+                going = 0
+            } else if is_cons_val(nxt) == 1 {
+                cur = nxt
+            } else {
+                let o3 = str_builder_append(b, " . ")
+                let o4 = str_builder_append(b, @(nxt, spool, cars, cdrs))
+                going = 0
+            }
+        }
+        let o5 = str_builder_append(b, ")")
+        return str_builder_finish(b)
+    }
+    f"{v}"
+}
+
+# Apply function-table entry fi to already-evaluated argv: bind the
+# parameter names with a save/restore frame over the one environment
+# map, evaluate the body, restore the shadowed values, return the body
+# value. Shared by named defun calls, lambda values, and higher-order
+# applications.
+fn apply_fn(toks: List<Str>, fi: Int, argv: List<Int>, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> Int {
+    let pstart = fparams[fi]
+    let saved_names: List<Str> = []
+    let saved_vals: List<Int> = []
+    let saved_had: List<Int> = []
+    let mut pp = pstart + 1
+    let mut ai = 0
+    while toks[pp] != ")" {
+        let pname = toks[pp]
+        saved_names.push(pname)
+        if genv.contains(pname) {
+            saved_had.push(1)
+            saved_vals.push(genv.get(pname, 0))
+        } else {
+            saved_had.push(0)
+            saved_vals.push(0)
+        }
+        let mut av = nil_val()
+        if ai < argv.len() { av = argv[ai] }
+        genv.insert(pname, av)
+        pp += 1
+        ai += 1
+    }
+    let (rv, rp) = eval_at(toks, fbodies[fi], genv, fnames, fparams, fbodies, spool, cars, cdrs)
+    let mut si = 0
+    while si < saved_names.len() {
+        if saved_had[si] == 1 {
+            genv.insert(saved_names[si], saved_vals[si])
+        } else {
+            genv.remove(saved_names[si])
+        }
+        si += 1
+    }
+    rv
+}
+
+# Evaluate one expression at pos; returns (value, next-pos).
+fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> (Int, Int) {
     if pos >= toks.len() { return (0, pos) }
     let t = toks[pos]
     if t != "(" {
         if is_digit_atom(t) == 1 {
             return (parse_int(t), pos + 1)
+        }
+        if t[0] == 34 {
+            let inner = str_slice(t, 1, t.len() - 2)
+            return (intern_str(inner, spool), pos + 1)
+        }
+        if t == "nil" {
+            return (nil_val(), pos + 1)
         }
         if genv.contains(t) {
             return (genv.get(t, 0), pos + 1)
@@ -115,19 +276,21 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
     let head = toks[pos + 1]
     if head == "define" or head == "set" {
         let name = toks[pos + 2]
-        let (v, np) = eval_at(toks, pos + 3, genv, fnames, fparams, fbodies)
+        let (v, np) = eval_at(toks, pos + 3, genv, fnames, fparams, fbodies, spool, cars, cdrs)
         genv.insert(name, v)
         return (v, np + 1)
     }
     if head == "if" {
-        let (c, cp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies)
+        let (c, cp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
         if c != 0 {
-            let (a, ap) = eval_at(toks, cp, genv, fnames, fparams, fbodies)
-            let ep = skip_expr(toks, ap)
-            return (a, ep + 1)
+            if c != nil_val() {
+                let (a, ap) = eval_at(toks, cp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                let ep = skip_expr(toks, ap)
+                return (a, ep + 1)
+            }
         }
         let sp = skip_expr(toks, cp)
-        let (b, bp) = eval_at(toks, sp, genv, fnames, fparams, fbodies)
+        let (b, bp) = eval_at(toks, sp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
         return (b, bp + 1)
     }
     if head == "while" {
@@ -136,13 +299,16 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         let mut last = 0
         let mut looping = 1
         while looping == 1 {
-            let (c, cp) = eval_at(toks, cond_pos, genv, fnames, fparams, fbodies)
-            if c == 0 {
+            let (c, cp) = eval_at(toks, cond_pos, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+            let mut truthy = 1
+            if c == 0 { truthy = 0 }
+            if c == nil_val() { truthy = 0 }
+            if truthy == 0 {
                 looping = 0
             } else {
                 let mut bp = body_pos
                 while toks[bp] != ")" {
-                    let (v, np) = eval_at(toks, bp, genv, fnames, fparams, fbodies)
+                    let (v, np) = eval_at(toks, bp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
                     last = v
                     bp = np
                 }
@@ -158,15 +324,15 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         let mut p = pos + 2
         let mut last = 0
         while toks[p] != ")" {
-            let (v, np) = eval_at(toks, p, genv, fnames, fparams, fbodies)
+            let (v, np) = eval_at(toks, p, genv, fnames, fparams, fbodies, spool, cars, cdrs)
             last = v
             p = np
         }
         return (last, p + 1)
     }
     if head == "print" {
-        let (v, np) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies)
-        print(f"{v}")
+        let (v, np) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        print(print_value(v, spool, cars, cdrs))
         return (v, np + 1)
     }
     if head == "defun" {
@@ -178,9 +344,96 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         let endp = skip_expr(toks, body_start)
         return (0, endp + 1)
     }
+    if head == "lambda" {
+        fnames.push("<lambda>")
+        fparams.push(pos + 2)
+        let lbody = skip_expr(toks, pos + 2)
+        fbodies.push(lbody)
+        let lend = skip_expr(toks, lbody)
+        return (fn_base() + fnames.len() - 1, lend + 1)
+    }
+    if head == "cons" {
+        let (a, ap) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (d, dp) = eval_at(toks, ap, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        cars.push(a)
+        cdrs.push(d)
+        return (cons_base() + cars.len() - 1, dp + 1)
+    }
+    if head == "car" or head == "cdr" {
+        let (p1, np1) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        if is_cons_val(p1) == 0 {
+            print(f"error: {head} needs a cons")
+            return (nil_val(), np1 + 1)
+        }
+        if head == "car" {
+            return (cars[p1 - cons_base()], np1 + 1)
+        }
+        return (cdrs[p1 - cons_base()], np1 + 1)
+    }
+    if head == "list" {
+        let items: List<Int> = []
+        let mut lp = pos + 2
+        while toks[lp] != ")" {
+            let (iv, inp) = eval_at(toks, lp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+            items.push(iv)
+            lp = inp
+        }
+        let mut acc = nil_val()
+        let mut ri = items.len()
+        while ri > 0 {
+            ri -= 1
+            cars.push(items[ri])
+            cdrs.push(acc)
+            acc = cons_base() + cars.len() - 1
+        }
+        return (acc, lp + 1)
+    }
+    if head == "null?" {
+        let (nv, nnp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let mut isn = 0
+        if nv == nil_val() { isn = 1 }
+        return (isn, nnp + 1)
+    }
+    if head == "str-len" {
+        let (sv, snp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        if is_str_val(sv) == 0 {
+            print("error: str-len needs a string")
+            return (0, snp + 1)
+        }
+        let pooled = spool[sv - str_base()]
+        return (pooled.len(), snp + 1)
+    }
+    if head == "str-cat" {
+        let (s1, sp1) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (s2, sp2) = eval_at(toks, sp1, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        if is_str_val(s1) == 0 or is_str_val(s2) == 0 {
+            print("error: str-cat needs strings")
+            return (0, sp2 + 1)
+        }
+        let joined = str_concat(spool[s1 - str_base()], spool[s2 - str_base()])
+        return (intern_str(joined, spool), sp2 + 1)
+    }
     if head == "+" or head == "-" or head == "*" or head == "/" or head == "<" or head == ">" or head == "=" {
-        let (a, ap) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies)
-        let (b, bp) = eval_at(toks, ap, genv, fnames, fparams, fbodies)
+        let (a, ap) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (b, bp) = eval_at(toks, ap, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        if head == "=" {
+            if is_str_val(a) == 1 {
+                if is_str_val(b) == 1 {
+                    let mut eqv = 0
+                    if spool[a - str_base()] == spool[b - str_base()] { eqv = 1 }
+                    return (eqv, bp + 1)
+                }
+            }
+        }
+        if is_num_val(a) == 0 or is_num_val(b) == 0 {
+            if head == "=" {
+                let mut idv = 0
+                if a == b { idv = 1 }
+                return (idv, bp + 1)
+            }
+            print(f"error: {head} needs numbers")
+            return (0, bp + 1)
+        }
         let mut r = 0
         if head == "+" { r = a + b }
         if head == "-" { r = a - b }
@@ -203,64 +456,43 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         }
         return (r, bp + 1)
     }
-    let fi = fnames.index_of(head)
-    if fi < 0 {
-        print(f"error: unknown form {head}")
-        let ep = skip_expr(toks, pos)
-        return (0, ep)
+    # Named defun fast path, then general application: evaluate the head
+    # expression and apply its function value (lambdas, parameters and
+    # variables holding functions, immediate (lambda ...) calls).
+    let mut fi = 0 - 1
+    if head != "(" {
+        fi = fnames.index_of(head)
     }
-    # Evaluate call arguments left to right, then bind parameters with
-    # a save/restore frame so recursive calls unwind their shadows.
+    let mut hp = pos + 2
+    if fi < 0 {
+        let (hv, hnp) = eval_at(toks, pos + 1, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        if is_fn_val(hv) == 0 {
+            print(f"error: not a function: {head}")
+            let ep = skip_expr(toks, pos)
+            return (0, ep)
+        }
+        fi = hv - fn_base()
+        hp = hnp
+    }
     let argv: List<Int> = []
-    let mut ap2 = pos + 2
+    let mut ap2 = hp
     while toks[ap2] != ")" {
-        let (av, anp) = eval_at(toks, ap2, genv, fnames, fparams, fbodies)
+        let (av, anp) = eval_at(toks, ap2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
         argv.push(av)
         ap2 = anp
     }
-    let pstart = fparams[fi]
-    let saved_names: List<Str> = []
-    let saved_vals: List<Int> = []
-    let saved_had: List<Int> = []
-    let mut pp = pstart + 1
-    let mut ai = 0
-    while toks[pp] != ")" {
-        let pname = toks[pp]
-        saved_names.push(pname)
-        if genv.contains(pname) {
-            saved_had.push(1)
-            saved_vals.push(genv.get(pname, 0))
-        } else {
-            saved_had.push(0)
-            saved_vals.push(0)
-        }
-        let mut av2 = 0
-        if ai < argv.len() { av2 = argv[ai] }
-        genv.insert(pname, av2)
-        pp += 1
-        ai += 1
-    }
-    let (rv, rp) = eval_at(toks, fbodies[fi], genv, fnames, fparams, fbodies)
-    let mut si = 0
-    while si < saved_names.len() {
-        if saved_had[si] == 1 {
-            genv.insert(saved_names[si], saved_vals[si])
-        } else {
-            genv.remove(saved_names[si])
-        }
-        si += 1
-    }
+    let rv = apply_fn(toks, fi, argv, genv, fnames, fparams, fbodies, spool, cars, cdrs)
     return (rv, ap2 + 1)
 }
 
 # Evaluate every top-level expression in [start, toks.len()); returns
 # the last value. The np <= p guard turns malformed input into a stop
 # instead of a spin.
-fn eval_program(toks: List<Str>, start: Int, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>) -> Int {
+fn eval_program(toks: List<Str>, start: Int, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> Int {
     let mut p = start
     let mut last = 0
     while p < toks.len() {
-        let (v, np) = eval_at(toks, p, genv, fnames, fparams, fbodies)
+        let (v, np) = eval_at(toks, p, genv, fnames, fparams, fbodies, spool, cars, cdrs)
         last = v
         if np <= p { return last }
         p = np
@@ -275,18 +507,24 @@ fn eval_source(src: Str) -> Int {
     let fnames: List<Str> = []
     let fparams: List<Int> = []
     let fbodies: List<Int> = []
-    eval_program(toks, 0, genv, fnames, fparams, fbodies)
+    let spool: List<Str> = []
+    let cars: List<Int> = []
+    let cdrs: List<Int> = []
+    eval_program(toks, 0, genv, fnames, fparams, fbodies, spool, cars, cdrs)
 }
 
-# REPL: one growing token list keeps defun bodies addressable across
-# lines; each new line evaluates from its own token offset and prints
-# its last value. "" from stdin_read_line means EOF.
+# REPL: one growing token list keeps defun and lambda bodies
+# addressable across lines; each new line evaluates from its own token
+# offset and prints its last value. "" from stdin_read_line means EOF.
 fn run_repl() -> Int {
     let toks: List<Str> = []
     let genv: Map<Str,Int> = {}
     let fnames: List<Str> = []
     let fparams: List<Int> = []
     let fbodies: List<Int> = []
+    let spool: List<Str> = []
+    let cars: List<Int> = []
+    let cdrs: List<Int> = []
     let mut last = 0
     let mut going = 1
     while going == 1 {
@@ -295,14 +533,27 @@ fn run_repl() -> Int {
             going = 0
         } else {
             let start = toks.len()
+            let fns_before = fnames.len()
             let added = tokenize_into(line, toks)
             if added > 0 {
-                last = eval_program(toks, start, genv, fnames, fparams, fbodies)
-                print(f"= {last}")
+                last = eval_program(toks, start, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                print(f"= {print_value(last, spool, cars, cdrs)}")
+                # Only defun/lambda registrations keep token spans alive;
+                # a line that registered none rolls its tokens back so a
+                # long session of throwaway expressions never exhausts
+                # the 4095-slot token list (interned strings and cons
+                # cells live in their own pools, so values survive).
+                if fnames.len() == fns_before {
+                    while toks.len() > start {
+                        toks.pop()
+                    }
+                }
             }
         }
     }
-    last
+    # A tagged last value (string/cons/fn) is meaningless mod 256, so a
+    # finished REPL session simply exits clean.
+    0
 }
 
 fn run_file(path: Str) -> Int {
@@ -327,6 +578,20 @@ fn self_test() -> Int {
     if eval_source("(begin (define x 42) (defun clobber (x) (* x 0)) (clobber 7) x)") != 42 { return 10 }
     if eval_source("(/ 84 2)") != 42 { return 11 }
     if eval_source("(begin (defun sum2 (a b) (+ a b)) (sum2 20 22))") != 42 { return 12 }
+    # strings: pooled literals, length, concatenation, equality
+    if eval_source("(str-len \"hello\")") != 5 { return 13 }
+    if eval_source("(str-len (str-cat \"vais\" \"lisp\"))") != 8 { return 14 }
+    if eval_source("(if (= \"ab\" (str-cat \"a\" \"b\")) 42 0)") != 42 { return 15 }
+    if eval_source("(if (= \"ab\" \"ac\") 0 42)") != 42 { return 16 }
+    # lists: cons cells, list sugar, recursive traversal
+    if eval_source("(car (cons 41 nil))") != 41 { return 17 }
+    if eval_source("(begin (define p (cons 1 (cons 2 nil))) (+ (car p) (car (cdr p))))") != 3 { return 18 }
+    if eval_source("(if (null? nil) 42 0)") != 42 { return 19 }
+    if eval_source("(begin (defun lsum (xs) (if (null? xs) 0 (+ (car xs) (lsum (cdr xs))))) (lsum (list 12 10 20)))") != 42 { return 20 }
+    # lambda: immediate call, stored value, higher-order application
+    if eval_source("((lambda (x) (* x 2)) 21)") != 42 { return 21 }
+    if eval_source("(begin (define f (lambda (n) (+ n 2))) (f 40))") != 42 { return 22 }
+    if eval_source("(begin (defun ap (g x) (g x)) (ap (lambda (n) (- n 8)) 50))") != 42 { return 23 }
     42
 }
 

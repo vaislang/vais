@@ -17384,6 +17384,26 @@ static char *lower_tuple_text(const char *text) {
     int active_arity = 0;
     int active_depth = 0;
 
+    /* Pass 1: collect every tuple-fn signature up front, so a
+     * destructure may call a tuple function declared later in the file
+     * (mirroring the front's two-pass unknown-call resolution — the
+     * vaislisp apply/eval mutual recursion is the concrete demand). */
+    for (size_t i = 0; i < lines.len && info.count < 16; i++) {
+        char *pre_name = NULL;
+        char *pre_struct = NULL;
+        char *pre_rewritten = NULL;
+        char *pre_types = NULL;
+        int pre_arity = 0;
+        if (parse_tuple_fn_signature(lines.items[i], &pre_name, &pre_struct, &pre_rewritten, &pre_types, &pre_arity)) {
+            info.items[info.count].name = pre_name;
+            info.items[info.count].struct_name = pre_struct;
+            info.items[info.count].types = pre_types;
+            info.items[info.count].arity = pre_arity;
+            info.count++;
+            free(pre_rewritten);
+        }
+    }
+
     for (size_t i = 0; i < lines.len; i++) {
         char *line = lines.items[i];
         char *name = NULL;
@@ -17393,18 +17413,17 @@ static char *lower_tuple_text(const char *text) {
         int arity = 0;
 
         if (parse_tuple_fn_signature(line, &name, &struct_name, &rewritten, &types, &arity)) {
-            if (info.count < 16) {
-                info.items[info.count].name = name;
-                info.items[info.count].struct_name = struct_name;
-                info.items[info.count].types = types;
-                info.items[info.count].arity = arity;
-                char *struct_line = tuple_struct_line(struct_name, types, arity);
+            TupleFnInfo *reg = tuple_info_find(&info, name, strlen(name));
+            if (reg != NULL) {
+                char *struct_line = tuple_struct_line(reg->struct_name, reg->types, reg->arity);
                 lines_push(&out, struct_line);
                 lines_push(&out, rewritten);
-                active_struct = info.items[info.count].struct_name;
-                active_arity = arity;
+                active_struct = reg->struct_name;
+                active_arity = reg->arity;
                 active_depth = tuple_line_brace_delta(rewritten);
-                info.count++;
+                free(name);
+                free(struct_name);
+                free(types);
                 continue;
             }
             free(name);

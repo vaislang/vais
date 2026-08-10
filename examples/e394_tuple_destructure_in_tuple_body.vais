@@ -21,6 +21,17 @@ fn cross(n: Int) -> (Int, Int) {
     return (v + s.len(), v)
 }
 
+# Forward reference: this caller sits BEFORE its tuple callee, so the
+# lowering's signature pre-pass (not line order) must resolve it.
+fn early_caller(n: Int) -> Int {
+    let (u, w) = late_pair(n)
+    return u + w
+}
+
+fn late_pair(n: Int) -> (Int, Int) {
+    return (n, n + 2)
+}
+
 fn main() -> Int {
     let (a, b) = split_sum(120)
     if a != 21 { return 1 }
@@ -28,5 +39,6 @@ fn main() -> Int {
     let (c, d) = cross(9)
     if c != 10 { return 3 }
     if d != 9 { return 4 }
+    if early_caller(4) != 10 { return 5 }
     return a + b - 1
 }

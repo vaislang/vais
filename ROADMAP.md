@@ -22,7 +22,30 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-10) — v1.3.0 컷 + vaislisp 사이클(대화형 호스트 승격)
+## 현재 작업 (2026-08-10b) — vaislisp 표면 확장: 문자열·리스트·lambda
+모드: 개별선택 (프로그램형 도그푸딩 2라운드)
+설계: 평가기의 (Int, Int) 튜플 계약을 지키는 **태그드 Int 인코딩** —
+정수 밴드 ±1e15, STR 밴드(풀 인덱스=List<Str>), CONS 밴드(병렬
+List<Int> car/cdr 힙), FN 밴드(defun 테이블 인덱스), NIL 상수. 밴드
+밖 산술은 LOUD 에러 print + 0.
+- [x] 1~2. 태그드 값 + 신규 폼 ✅ 2026-08-10 — 문자열 풀/cons 병렬 힙/
+      FN 테이블 인덱스 밴드, "..." 토큰, str-len/str-cat/= 문자열 동등,
+      cons/car/cdr/list/null?/nil + 재귀 리스트 렌더, lambda 값-호출
+      적용 경로(고차 합성 (twice λ)=36). self-test 13~23.
+- [x] 3. 게이트+실측 ✅ — 워크플로 vaislisp 12케이스. **누수 프로브가
+      먼저 캡 발견**: 20k줄 세션이 토큰 리스트 4095 캡 trap(~340줄) →
+      무-정의 라인 토큰 pop-롤백(값은 풀에 interned라 안전) 후 **20k줄
+      0.42s/피크 10.4MB 완주**(라인당 ~500B 아레나 = 실사용 무해).
+      풀/힙 캡은 세션 한계로 문서화.
+- [x] 4. 경유 root-fix + 갭 등록 ✅ — **튜플 로워링 2-pass화**(전방
+      참조 해소 — apply/eval 상호재귀가 수요, e394 확장 잠금). 경유
+      발견: 한줄 식-본문 fn이 full 엔진에서 빈 IR 방출(front 미거부) —
+      후보 등록, vaislisp는 검증 표기(멀티라인)로 전환. 트랩: 파이프
+      exit 오인 4회차(PKG=$?가 head의 것 — 로그 파일+개별 echo로).
+진행률: 4/4 (100%) — 게이트: fmt/front/direct/fixpoint-full/test.sh 413/
+parity 413/self-host/release 전부 GREEN
+
+## 직전 완료 (2026-08-10) — v1.3.0 컷 + vaislisp 사이클(대화형 호스트 승격)
 모드: 개별선택 (사용자 방향: DB보다 "프로그램적" 제작 — 인터프리터 채택)
 - [x] 1. v1.3.0 컷 ✅ 2026-08-10 — v1.2.0 이후 8커밋 회전(재귀 -r/4096
       창 제거/비단어 토크나이저(인덱스 재구축 고지)/similar 파티션/top
@@ -191,6 +214,11 @@ release 전부 GREEN (커밋 a862d163)
 진행률: 2/2 (100%)
 
 ### 다음 후보 (2026-08-08 도그푸딩 환류)
+- 한줄 식-본문 fn(`fn f() -> Int { 64 }`): full 엔진이 빈 IR 방출(silent
+  →clang 오류로 늦게 표면), front 미거부 — 거부 or 지원 중 결정 필요
+  (2026-08-10b vaislisp 실측).
+- vaislisp 풀/힙 4095 캡: 문자열-heavy 장수 세션 한계 — 풀 파티션/GC는
+  수요 시.
 - ~~랭킹 특이성(식별자 쿼리 공통-토큰 지배)~~ (완결 2026-08-08i:
   `-all` 옵트인 — 후보 집합 회복. 잔여: 전-텀 보유 문서의 생존자 랭킹
   공통-토큰 지배 → 희귀-텀 가중/포화, 수요 시).

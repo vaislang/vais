@@ -4,6 +4,40 @@
 
 ### Added
 
+- vaislisp surface expansion: strings, lists, and first-class lambdas
+  over a tagged-Int value encoding that keeps the evaluator's
+  (value, next) tuple contract — plain numbers live inside +/-1e15,
+  string values index a session pool, cons cells index parallel
+  car/cdr heaps, function values index the defun/lambda table, and nil
+  is one reserved constant (arithmetic outside the number band reports
+  a loud error). New forms: string literals with str-len / str-cat and
+  string equality through =, cons / car / cdr / list / null? / nil
+  with recursive list printing, and (lambda ...) as a value —
+  applications evaluate the head, so higher-order composition and
+  immediate calls work ((twice (lambda (n) (* n 3)) 4) = 36 in the
+  gate). REPL lines that register no definition roll their tokens
+  back, so a 20,000-expression session finishes in 0.42 s at ~10 MB
+  peak (measured); interned strings and cons cells stay session-scoped
+  arenas. Twelve vaislisp workflow-gate cases and self-test cases
+  13-23 lock the surface.
+
+### Fixed
+
+- Tuple lowering resolves forward references: signatures now collect
+  in a pre-pass (mirroring the front's two-pass unknown-call
+  resolution), so a destructure may call a tuple function declared
+  later in the file — the vaislisp apply/eval mutual recursion is the
+  concrete demand, and e394 locks an early caller destructuring a
+  later tuple callee.
+
+- Registered front-gap candidate from the same build: a one-line
+  expression-bodied function (`fn f() -> Int { 64 }`) emits an empty
+  body on the full engine instead of being rejected or supported —
+  vaislisp switched to the verified multiline spelling and the gap is
+  on the roadmap.
+
+### Added
+
 - Interactive host slice, demanded by the vaislisp REPL:
   `stdin_read_line() -> Str` returns the next stdin line including its
   trailing newline (fgets shape; `""` means EOF, so an empty input
