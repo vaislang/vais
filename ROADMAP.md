@@ -22,7 +22,29 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-10b) — vaislisp 표면 확장: 문자열·리스트·lambda
+## 현재 작업 (2026-08-11) — 한줄 fn 본문 갭 처리: 평탄 지원 + 불가형 front 거부
+모드: 개별선택 (2026-08-10b 등록 후보 즉시 소화 — silent 갭 근절)
+결정: **평탄 한줄 본문은 지원**(분할 정규화), **불가형은 front 거부**
+— 어느 경로에도 silent 없음.
+- [x] 1. split_fn_body_line 콘텐츠 분할 ✅ 2026-08-11 — 기존 `;` 전용
+      게이트를 has_content+max_brace<=1로 확장: `fn f() -> Int { 40 }`,
+      `fn tag() -> Str { "ab" }`, `;`-결합 평탄문 전부 멀티라인 정규화
+      (양 엔진 공용 pre-pass라 단일 지점). **제네릭 헤더(`fn n<T>(`)는
+      분할 제외** — 한줄 제네릭 identity 로워링이 단일 라인 전체를
+      소비하는 계약(분할 시 특수화 무산 → e46 픽스처 got=88 회귀로
+      실증, 헤더 스캔 제외로 복구).
+- [x] 2. front 거부 2종 ✅ — front_check_one_line_fn_body: 빈 본문
+      "function bodies cannot be empty" / 중첩 무분리 한줄 "one-line
+      function bodies with nested blocks need statement separators or
+      separate lines". front 게이트 거부 픽스처 2건(empty_fn_body/
+      nested_one_line_fn) 등록.
+- [x] 3. 예제+도그푸드 ✅ — e395(tail-식/Str 리터럴/`;`-결합, expect
+      42, parity 등록, FULL=DIRECT=42). vaislisp 밴드 상수를 한줄
+      표기로 복원(살아있는 증명, PKG=0/SELFTEST=42).
+- [ ] 4. 전체 래더 + 커밋/푸시
+진행률: 3/4 (75%)
+
+## 직전 완료 (2026-08-10b) — vaislisp 표면 확장: 문자열·리스트·lambda
 모드: 개별선택 (프로그램형 도그푸딩 2라운드)
 설계: 평가기의 (Int, Int) 튜플 계약을 지키는 **태그드 Int 인코딩** —
 정수 밴드 ±1e15, STR 밴드(풀 인덱스=List<Str>), CONS 밴드(병렬
@@ -214,9 +236,9 @@ release 전부 GREEN (커밋 a862d163)
 진행률: 2/2 (100%)
 
 ### 다음 후보 (2026-08-08 도그푸딩 환류)
-- 한줄 식-본문 fn(`fn f() -> Int { 64 }`): full 엔진이 빈 IR 방출(silent
-  →clang 오류로 늦게 표면), front 미거부 — 거부 or 지원 중 결정 필요
-  (2026-08-10b vaislisp 실측).
+- ~~한줄 식-본문 fn(`fn f() -> Int { 64 }`)~~ (완결 2026-08-11: 평탄
+  한줄 본문 분할 지원 + 빈/중첩 한줄 front 거부, 제네릭 identity 한줄
+  계약은 분할 제외 — e395 + front 픽스처 2건).
 - vaislisp 풀/힙 4095 캡: 문자열-heavy 장수 세션 한계 — 풀 파티션/GC는
   수요 시.
 - ~~랭킹 특이성(식별자 쿼리 공통-토큰 지배)~~ (완결 2026-08-08i:

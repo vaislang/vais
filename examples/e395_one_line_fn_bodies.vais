@@ -1,0 +1,17 @@
+# expect: 42
+# One-line fn bodies normalize through the body splitter when they are
+# flat: a bare tail expression, a return statement, or `;`-separated
+# depth-1 statements all lower on both engines. Empty bodies and
+# nested-brace one-liners without separators are rejected at the front
+# (the full engine used to emit an empty IR function for them
+# silently — found by the vaislisp band constants).
+fn tail_answer() -> Int { 40 }
+
+fn tag() -> Str { "ab" }
+
+fn stepped(n: Int) -> Int { let m = n + 1; return m + 1 }
+
+fn main() -> Int {
+    let t = tag()
+    return tail_answer() + stepped(t.len() - 2)
+}

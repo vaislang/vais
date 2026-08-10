@@ -30,11 +30,18 @@
   concrete demand, and e394 locks an early caller destructuring a
   later tuple callee.
 
-- Registered front-gap candidate from the same build: a one-line
-  expression-bodied function (`fn f() -> Int { 64 }`) emits an empty
-  body on the full engine instead of being rejected or supported —
-  vaislisp switched to the verified multiline spelling and the gap is
-  on the roadmap.
+- One-line fn bodies are now a decided surface instead of a silent
+  gap: flat one-line bodies (`fn tail() -> Int { 40 }`,
+  `fn tag() -> Str { "ab" }`, and `;`-joined flat statements) split to
+  the verified multiline form before lowering on both engines — the
+  full engine previously emitted an empty body for
+  `fn f() -> Int { 64 }` while the direct engine rejected it. Empty
+  bodies and one-line bodies with nested blocks are rejected by the
+  front with dedicated messages, one-line generic identity helpers
+  are exempt from splitting (the generic identity lowering consumes
+  the single-line form whole), and e395 plus two front-gate reject
+  fixtures lock the behavior. The vaislisp band constants moved back
+  to the one-line spelling as in-tree proof.
 
 ### Added
 

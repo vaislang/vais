@@ -403,6 +403,9 @@ lambdas with higher-order application), defun save/restore frames, a
 mode,
 `examples/e394_tuple_destructure_in_tuple_body.vais` for tuple destructures
 inside tuple-returning bodies (self-recursive and cross-function),
+`examples/e395_one_line_fn_bodies.vais` for one-line flat fn bodies (tail
+expression, `Str` literal, and `;`-joined statements) normalizing to the
+multiline form on both engines,
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

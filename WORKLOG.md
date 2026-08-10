@@ -1,5 +1,24 @@
 # Vais Worklog
 
+## 2026-08-11 (한줄 fn 본문 갭 — 평탄 지원 + 불가형 front 거부)
+
+**결정: silent 없는 양분**. 평탄 한줄 본문(`fn f() -> Int { 40 }`,
+`fn tag() -> Str { "ab" }`, `;`-결합 평탄문)은 split_fn_body_line의
+게이트를 has_split-전용에서 has_content+max_brace<=1로 확장해
+멀티라인으로 정규화(양 엔진 공용 pre-pass 단일 지점 — full의 빈 IR
+방출과 direct의 자체 거부가 동시에 해소). 빈 본문과 중첩 무분리
+한줄은 front_check_one_line_fn_body가 전용 메시지로 거부.
+
+**분할 제외 계약 1건 실증**: 제네릭 identity(`fn apply<T>(x: T) -> T
+{ return x }`)는 한줄 전체를 lower_generic_identity_struct_text가
+소비 — split_statement_lines가 그보다 먼저 돌므로 분할하면 특수화
+무산(front 픽스처 generic_apply_struct got=88 회귀로 표면). 헤더
+`<` 스캔으로 제네릭 fn 라인은 바이트-동일 통과.
+
+e395(3형태 잠금, FULL=DIRECT=42) + front 거부 픽스처 2건 + vaislisp
+밴드 상수 한줄 복원(PKG=0/SELFTEST=42). 트랩 재확인: 신규 front
+검사는 기존 accept 픽스처 전수(front 게이트)로 즉시 회귀 검증.
+
 ## 2026-08-10b (vaislisp 표면 확장 — 태그드 값으로 문자열·리스트·lambda)
 
 **(Int, Int) 튜플 계약을 지키는 태그드 인코딩**: 숫자 ±1e15 밴드, STR

@@ -141,6 +141,15 @@ Verified today:
 - Recursive and mutually recursive `Int` functions.
 - Generic marker syntax for simple `Int` helper cases and generic identity
   helpers applied to struct literals, as tracked in the parity manifest.
+- One-line flat bodies: `fn tail() -> Int { 40 }`, `fn tag() -> Str { "ab" }`,
+  and `;`-joined flat statements such as
+  `fn stepped(n: Int) -> Int { let m = n + 1; return m + 1 }` normalize to the
+  multiline form before lowering (`examples/e395_one_line_fn_bodies.vais`).
+  Empty bodies (`fn f() -> Int { }`) and one-line bodies containing nested
+  blocks (`{ if n > 0 { return n } return 0 - n }`) are rejected by the front
+  with dedicated messages — write nested control flow across multiple lines.
+  One-line generic identity helpers keep their single-line form (they are
+  consumed whole by the generic identity lowering).
 
 The direct engine gate covers Int, Bool, Char, and Str helper calls in addition to the
 full engine.

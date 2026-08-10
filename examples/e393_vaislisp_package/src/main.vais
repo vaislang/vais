@@ -21,25 +21,15 @@
 # exits with the last value, `vaislisp repl` reads stdin lines until
 # EOF and prints each top-level value.
 
-fn int_band() -> Int {
-    1000000000000000
-}
+fn int_band() -> Int { 1000000000000000 }
 
-fn str_base() -> Int {
-    2000000000000000
-}
+fn str_base() -> Int { 2000000000000000 }
 
-fn cons_base() -> Int {
-    3000000000000000
-}
+fn cons_base() -> Int { 3000000000000000 }
 
-fn fn_base() -> Int {
-    4000000000000000
-}
+fn fn_base() -> Int { 4000000000000000 }
 
-fn nil_val() -> Int {
-    6000000000000000
-}
+fn nil_val() -> Int { 6000000000000000 }
 
 fn is_num_val(v: Int) -> Int {
     if v < int_band() {

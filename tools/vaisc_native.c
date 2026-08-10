@@ -18072,6 +18072,17 @@ static void split_fn_body_line(StrBuf *out, const char *line, size_t n) {
         return;
     }
 
+    /* Generic headers (`fn name<T>(...)`) are owned by the one-line generic
+     * identity lowering, which runs after this pass and requires the whole
+     * definition on a single line. Splitting one here would strand the
+     * generic unspecialized. */
+    for (size_t g = indent_len + 3; g < n && line[g] != '(' && line[g] != '{'; g++) {
+        if (line[g] == '<') {
+            sb_append_n(out, line, n);
+            return;
+        }
+    }
+
     /* Pre-scan: the fn body must open ('{' at brace depth 0 -> 1) and close
      * ('}' back to depth 0) on this line, with at least one statement
      * separator ';' at brace depth 1 outside parens/brackets, strings, and
@@ -18084,6 +18095,8 @@ static void split_fn_body_line(StrBuf *out, const char *line, size_t n) {
     int opened = 0;
     int closed = 0;
     int has_split = 0;
+    int has_content = 0;
+    int max_brace = 0;
     for (size_t i = indent_len; i < n; i++) {
         char ch = line[i];
         if (escaped) {
@@ -18091,15 +18104,18 @@ static void split_fn_body_line(StrBuf *out, const char *line, size_t n) {
             continue;
         }
         if (delim != '\0') {
+            if (opened && !closed) has_content = 1;
             if (ch == '\\') escaped = 1;
             else if (ch == delim) delim = '\0';
             continue;
         }
         if (ch == '"' || ch == '`') {
+            if (opened && !closed) has_content = 1;
             delim = ch;
             continue;
         }
         if (ch == '#') break;
+        if (opened && !closed && ch != ' ' && ch != '\t' && ch != '}') has_content = 1;
         if (ch == '(') paren++;
         else if (ch == ')') {
             if (paren > 0) paren--;
@@ -18108,6 +18124,7 @@ static void split_fn_body_line(StrBuf *out, const char *line, size_t n) {
             if (bracket > 0) bracket--;
         } else if (ch == '{') {
             brace++;
+            if (brace > max_brace) max_brace = brace;
             if (brace == 1 && paren == 0 && bracket == 0 && !opened && !closed) opened = 1;
         } else if (ch == '}') {
             if (brace > 0) brace--;
@@ -18116,7 +18133,12 @@ static void split_fn_body_line(StrBuf *out, const char *line, size_t n) {
             has_split = 1;
         }
     }
-    if (!opened || !closed || !has_split || delim != '\0') {
+    /* Split when the one-line body holds any content at all — a bare
+     * tail expression (`fn f() -> Int { 42 }`) is idiomatic Vais, and
+     * leaving it unsplit made the full engine emit an empty function
+     * body while the direct engine rejected with its own message. An
+     * empty `{ }` body stays unsplit for the front to reject loudly. */
+    if (!opened || !closed || !(has_split || (has_content && max_brace <= 1)) || delim != '\0') {
         sb_append_n(out, line, n);
         return;
     }
@@ -22899,6 +22921,55 @@ static int front_check_unknown_var_line(const char *path, int line_no, const cha
     return issues;
 }
 
+/* One-line fn bodies the splitter leaves alone would emit an empty IR
+ * function on the full engine — reject them loudly instead. Two such
+ * spellings remain after the content-based split: an empty `{ }` body,
+ * and a nested-brace body without depth-1 semicolons (the splitter
+ * only normalizes flat or `;`-separated one-liners). */
+static int front_check_one_line_fn_body(const char *path, int line_no, const char *line, const char *probe) {
+    const char *t = skip_ws(probe);
+    if (!starts_with(t, "fn ")) return 0;
+    const char *open = strchr(t, '{');
+    if (open == NULL) return 0;
+    int brace = 0;
+    int opened = 0;
+    int closed = 0;
+    int has_semi = 0;
+    int has_content = 0;
+    int max_brace = 0;
+    for (const char *p = open; *p != '\0'; p++) {
+        char ch = *p;
+        if (ch == '#') break;
+        if (opened && !closed && ch != ' ' && ch != '\t' && ch != '}') has_content = 1;
+        if (ch == '{') {
+            brace++;
+            if (brace > max_brace) max_brace = brace;
+            if (brace == 1 && !opened) opened = 1;
+        } else if (ch == '}') {
+            if (brace > 0) brace--;
+            if (brace == 0 && opened && !closed) closed = 1;
+        } else if (ch == ';' && opened && !closed && brace == 1) {
+            has_semi = 1;
+        }
+    }
+    if (!opened || !closed) return 0;
+    if (!has_content) {
+        report_issue(path, line_no, find_col(line, "{"), line,
+            "function bodies cannot be empty",
+            "give the function at least one statement or a tail expression.",
+            NULL);
+        return 1;
+    }
+    if (max_brace > 1 && !has_semi) {
+        report_issue(path, line_no, find_col(line, "{"), line,
+            "one-line function bodies with nested blocks need statement separators or separate lines",
+            "write the body across multiple lines, or separate depth-1 statements with `;` so the splitter can normalize it.",
+            NULL);
+        return 1;
+    }
+    return 0;
+}
+
 static int check_front_contract_text(const char *text, const char *path) {
     LineVec lines = split_lines(text);
     int issues = 0;
@@ -22941,6 +23012,7 @@ static int check_front_contract_text(const char *text, const char *path) {
             front_register_param_vars(probe, var_names, &var_count);
         }
         front_register_match_binder_vars(probe, var_names, &var_count);
+        issues += front_check_one_line_fn_body(path, line_no, line, probe);
         issues += front_check_unknown_var_line(path, line_no, line, probe, var_names, var_count,
                                                callable_names, callable_count, callable_overflow,
                                                struct_names, struct_count);
