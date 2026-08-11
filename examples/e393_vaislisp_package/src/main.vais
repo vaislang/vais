@@ -12,9 +12,13 @@
 # (defun name (params...) body), (lambda (params...) body) as a
 # first-class value — applications evaluate the head, so higher-order
 # calls and immediate calls work — (while c body...), (begin e...),
-# (print e), string literals "..." with str-len / str-cat, and lists
-# via cons / car / cdr / list / null? / nil. Scoping is dynamic with
-# save/restore parameter frames (lambdas do not capture lexically).
+# (let ((name e) ...) body...) with sequential bindings and shadow
+# restore, (print e), (quote e) / 'e building data without evaluation
+# (symbols intern as strings, spans become cons lists), string
+# literals "..." with str-len / str-cat / str-ref / str-byte, and
+# lists via cons / car / cdr / list / null? / nil. Scoping is dynamic
+# with save/restore parameter frames (lambdas do not capture
+# lexically); `'` is a token break, so atom names cannot contain it.
 #
 # Modes: no arguments runs the deterministic self-test (the
 # release-corpus entry), `vaislisp <file.lisp>` evaluates a file and
@@ -84,6 +88,10 @@ fn tokenize_into(src: Str, toks: List<Str>) -> Int {
             toks.push(")")
             pos += 1
             count += 1
+        } else if c == 39 {
+            toks.push("'")
+            pos += 1
+            count += 1
         } else if c == 59 {
             while pos < n {
                 if src[pos] == 10 { break }
@@ -109,7 +117,7 @@ fn tokenize_into(src: Str, toks: List<Str>) -> Int {
             let start = pos
             while pos < n {
                 let b = src[pos]
-                if is_ws(b) == 1 or b == 40 or b == 41 or b == 59 or b == 34 { break }
+                if is_ws(b) == 1 or b == 40 or b == 41 or b == 59 or b == 34 or b == 39 { break }
                 pos += 1
             }
             let b2 = str_builder_new()
@@ -141,9 +149,11 @@ fn is_digit_atom(s: Str) -> Int {
 }
 
 # Skip one complete expression starting at pos; returns the next pos.
+# A quote sugar token covers itself plus the expression it quotes.
 fn skip_expr(toks: List<Str>, pos: Int) -> Int {
     if pos >= toks.len() { return pos }
     let t = toks[pos]
+    if t == "'" { return skip_expr(toks, pos + 1) }
     if t != "(" { return pos + 1 }
     let mut p = pos + 1
     let mut depth = 1
@@ -163,6 +173,48 @@ fn skip_expr(toks: List<Str>, pos: Int) -> Int {
 fn intern_str(s: Str, spool: List<Str>) -> Int {
     spool.push(s)
     str_base() + spool.len() - 1
+}
+
+# Build a value from the token span at pos without evaluating: numbers
+# and string literals as themselves, nil as nil, any other symbol as
+# its interned name, and parenthesized spans as cons lists built
+# element by element. A nested quote token quotes the inner expression
+# directly. Returns (value, next-pos).
+fn quote_at(toks: List<Str>, pos: Int, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> (Int, Int) {
+    if pos >= toks.len() { return (nil_val(), pos) }
+    let t = toks[pos]
+    if t == "'" {
+        return quote_at(toks, pos + 1, spool, cars, cdrs)
+    }
+    if t == "(" {
+        let items: List<Int> = []
+        let mut p = pos + 1
+        while toks[p] != ")" {
+            let (iv, np) = quote_at(toks, p, spool, cars, cdrs)
+            items.push(iv)
+            p = np
+        }
+        let mut acc = nil_val()
+        let mut ri = items.len()
+        while ri > 0 {
+            ri -= 1
+            cars.push(items[ri])
+            cdrs.push(acc)
+            acc = cons_base() + cars.len() - 1
+        }
+        return (acc, p + 1)
+    }
+    if is_digit_atom(t) == 1 {
+        return (parse_int(t), pos + 1)
+    }
+    if t[0] == 34 {
+        let inner = str_slice(t, 1, t.len() - 2)
+        return (intern_str(inner, spool), pos + 1)
+    }
+    if t == "nil" {
+        return (nil_val(), pos + 1)
+    }
+    (intern_str(t, spool), pos + 1)
 }
 
 # Render a value for printing: pool strings verbatim, cons chains as
@@ -246,6 +298,9 @@ fn apply_fn(toks: List<Str>, fi: Int, argv: List<Int>, genv: Map<Str,Int>, fname
 fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> (Int, Int) {
     if pos >= toks.len() { return (0, pos) }
     let t = toks[pos]
+    if t == "'" {
+        return quote_at(toks, pos + 1, spool, cars, cdrs)
+    }
     if t != "(" {
         if is_digit_atom(t) == 1 {
             return (parse_int(t), pos + 1)
@@ -319,6 +374,51 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
             p = np
         }
         return (last, p + 1)
+    }
+    if head == "quote" {
+        let (qv, qp) = quote_at(toks, pos + 2, spool, cars, cdrs)
+        return (qv, qp + 1)
+    }
+    if head == "let" {
+        # (let ((name expr) ...) body...) — bindings evaluate in
+        # sequence with earlier ones visible (let* style), shadow the
+        # environment through the same save/restore frame discipline as
+        # apply_fn, and unwind after the body.
+        let saved_names: List<Str> = []
+        let saved_vals: List<Int> = []
+        let saved_had: List<Int> = []
+        let mut bp = pos + 3
+        while toks[bp] != ")" {
+            let bname = toks[bp + 1]
+            let (bv, bnp) = eval_at(toks, bp + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+            saved_names.push(bname)
+            if genv.contains(bname) {
+                saved_had.push(1)
+                saved_vals.push(genv.get(bname, 0))
+            } else {
+                saved_had.push(0)
+                saved_vals.push(0)
+            }
+            genv.insert(bname, bv)
+            bp = bnp + 1
+        }
+        let mut lp2 = bp + 1
+        let mut lastv = 0
+        while toks[lp2] != ")" {
+            let (v2, np2) = eval_at(toks, lp2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+            lastv = v2
+            lp2 = np2
+        }
+        let mut si = 0
+        while si < saved_names.len() {
+            if saved_had[si] == 1 {
+                genv.insert(saved_names[si], saved_vals[si])
+            } else {
+                genv.remove(saved_names[si])
+            }
+            si += 1
+        }
+        return (lastv, lp2 + 1)
     }
     if head == "print" {
         let (v, np) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
@@ -402,6 +502,26 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         }
         let joined = str_concat(spool[s1 - str_base()], spool[s2 - str_base()])
         return (intern_str(joined, spool), sp2 + 1)
+    }
+    if head == "str-ref" or head == "str-byte" {
+        # (str-ref s i) is the one-byte string at i; (str-byte s i) is
+        # that byte as a number. Both are loud on a non-string, a
+        # non-number index, or an out-of-range index.
+        let (sv, rp1) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (iv, rp2) = eval_at(toks, rp1, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        if is_str_val(sv) == 0 or is_num_val(iv) == 0 {
+            print(f"error: {head} needs a string and an index")
+            return (0, rp2 + 1)
+        }
+        let pooled = spool[sv - str_base()]
+        if iv < 0 or iv >= pooled.len() {
+            print(f"error: {head} index out of range")
+            return (0, rp2 + 1)
+        }
+        if head == "str-byte" {
+            return (pooled[iv], rp2 + 1)
+        }
+        return (intern_str(str_slice(pooled, iv, 1), spool), rp2 + 1)
     }
     if head == "+" or head == "-" or head == "*" or head == "/" or head == "<" or head == ">" or head == "=" {
         let (a, ap) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
@@ -582,6 +702,18 @@ fn self_test() -> Int {
     if eval_source("((lambda (x) (* x 2)) 21)") != 42 { return 21 }
     if eval_source("(begin (define f (lambda (n) (+ n 2))) (f 40))") != 42 { return 22 }
     if eval_source("(begin (defun ap (g x) (g x)) (ap (lambda (n) (- n 8)) 50))") != 42 { return 23 }
+    # let: local bindings, sequential visibility, shadow restore
+    if eval_source("(let ((a 40) (b 2)) (+ a b))") != 42 { return 24 }
+    if eval_source("(let ((a 6) (b (* a 7))) b)") != 42 { return 25 }
+    if eval_source("(begin (define x 42) (let ((x 7)) x) x)") != 42 { return 26 }
+    # quote: symbols intern as strings, lists build without evaluating
+    if eval_source("(str-len (quote hello))") != 5 { return 27 }
+    if eval_source("(car (cdr (quote (1 2 3))))") != 2 { return 28 }
+    if eval_source("(car '(42 7))") != 42 { return 29 }
+    if eval_source("(begin (defun lsum (xs) (if (null? xs) 0 (+ (car xs) (lsum (cdr xs))))) (lsum '(12 10 20)))") != 42 { return 30 }
+    # string indexing: one-byte string vs byte number
+    if eval_source("(str-byte \"abc\" 1)") != 98 { return 31 }
+    if eval_source("(if (= (str-ref \"vais\" 0) \"v\") 42 0)") != 42 { return 32 }
     42
 }
 

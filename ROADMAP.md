@@ -22,7 +22,25 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-11b) — vaisbox 로스터 편입: vaislisp 14번째 applet
+## 현재 작업 (2026-08-12) — vaislisp 표면 3라운드: let/quote/문자열 첨자
+모드: 개별선택 (프로그램형 도그푸딩 3라운드 — 수요 대기 후보 소화)
+- [x] 1. let ✅ 2026-08-12 — (let ((name e) ...) body...) 순차 바인딩
+      (앞 바인딩 가시 = let* 의미), apply_fn과 동일한 save/restore
+      섀도 프레임, 본문 후 복원.
+- [x] 2. quote + ' 슈가 ✅ — quote_at 비평가 자료화(숫자/문자열 리터럴
+      그대로, 심볼→풀 intern STR, 스팬→cons 리스트, 중첩 ' 직접 인용),
+      토크나이저 39 단독 토큰화(원자명에 ' 불가 명기), skip_expr '
+      스킵. REPL 롤백과 독립(값은 풀에 실체화 — 라인 간 생존 프로브
+      확인).
+- [x] 3. str-ref/str-byte ✅ — 1바이트 문자열 vs 바이트 숫자, 비문자열/
+      비숫자/범위 밖 전부 LOUD+0.
+- [x] 4. 잠금 ✅ — self-test 24~32(9케이스 추가, 32케이스), 워크플로
+      게이트 +5(let 섀도/순차, ' 데이터, 심볼 intern, str-ref·byte).
+- [x] 5. 문서 + 래더 ✅ — README/CHANGELOG/WORKLOG, fmt/workflow/
+      test.sh 414/parity 414/release 전부 GREEN.
+진행률: 5/5 (100%)
+
+## 직전 완료 (2026-08-11b) — vaisbox 로스터 편입: vaislisp 14번째 applet
 모드: 개별선택 (등록 후보 중 유일 비-수요-대기 건 소화)
 - [x] 1. 로스터+셀프테스트 ✅ 2026-08-11 — roster 14명(vaislisp 추가),
       멤버십/names[13] 검사, 산술 14*3=42로 갱신.

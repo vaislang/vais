@@ -399,9 +399,11 @@ sleeps with a total zero-return contract,
 `examples/e393_vaislisp_package` for the installable vaislisp Lisp
 interpreter — token-span evaluation through `(value, next)` tuple recursion
 over tagged-Int values (numbers, pooled strings, cons lists, first-class
-lambdas with higher-order application), defun save/restore frames, a
-`stdin_read_line` REPL with definition-preserving token rollback, and file
-mode,
+lambdas with higher-order application), defun save/restore frames, `let`
+bindings with sequential visibility and shadow restore, `quote`/`'` data
+literals (symbols intern as strings, spans become cons lists),
+`str-ref`/`str-byte` string indexing, a `stdin_read_line` REPL with
+definition-preserving token rollback, and file mode,
 `examples/e394_tuple_destructure_in_tuple_body.vais` for tuple destructures
 inside tuple-returning bodies (self-recursive and cross-function),
 `examples/e395_one_line_fn_bodies.vais` for one-line flat fn bodies (tail

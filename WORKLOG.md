@@ -1,5 +1,22 @@
 # Vais Worklog
 
+## 2026-08-12 (vaislisp 표면 3라운드 — let/quote/문자열 첨자)
+
+**let**: (let ((name e) ...) body...) — 바인딩은 순차 평가(앞 바인딩
+가시, let* 의미), apply_fn과 동일한 saved_names/vals/had 섀도 프레임,
+본문 마지막 값 반환 후 복원. **quote**: quote_at이 토큰 스팬을 평가
+없이 실체화 — 숫자/문자열 리터럴 그대로, nil은 nil, 그 외 심볼은 풀
+intern(STR 밴드), `(` 스팬은 항목 재귀 후 역방향 cons 접기. `'` 슈가는
+토크나이저에서 39를 단독 토큰으로(원자 break 집합에도 39 추가 — 원자명
+에 ' 불가), eval_at/skip_expr/quote_at 3곳이 인식. 인용 값은 풀에
+실체화되므로 REPL 무-정의 롤백과 독립 — (define q '(5 6)) 후 다음
+라인 (car q)=5 프로브로 확인. **str-ref/str-byte**: 1바이트 문자열 vs
+바이트 숫자, 오류 3계급(비문자열/비숫자 인덱스/범위 밖) 전부 LOUD+0.
+
+잠금: self-test 32케이스(+9), 워크플로 게이트 vaislisp 17케이스(+5).
+컴파일러 무변경(순수 .vais 확장 — 튜플 quote_at 자기재귀 명명 호출로
+e394 계약 준수).
+
 ## 2026-08-11b (vaisbox 로스터 — vaislisp 14번째 applet)
 
 로스터 문자열에 vaislisp 추가(13→14), 셀프테스트는 멤버십+names[13]

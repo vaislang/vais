@@ -4,6 +4,20 @@
 
 ### Added
 
+- vaislisp surface round 3: `(let ((name expr) ...) body...)` local
+  bindings that evaluate sequentially (earlier bindings visible),
+  shadow through the same save/restore frame discipline as function
+  application, and unwind after the body; `(quote e)` with `'e` reader
+  sugar building data without evaluation — numbers and string literals
+  stay themselves, other symbols intern into the string pool, and
+  parenthesized spans become cons lists, so `(car '(42 7))` is 42 and
+  quoted data outlives REPL token rollback through the value pools;
+  and string indexing via `(str-ref s i)` (one-byte string) and
+  `(str-byte s i)` (byte as number), both loud on type or range
+  violations. The apostrophe is now a token break, so atom names
+  cannot contain it. Self-test grows to 32 cases and the workflow
+  gate adds five round-3 cases.
+
 - vaisbox dispatches vaislisp: the roster grows from thirteen to
   fourteen applets, `vaisbox vaislisp repl` reaches the interpreter
   through the multicall path, and the package self-test moves to the

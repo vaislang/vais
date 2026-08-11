@@ -431,6 +431,11 @@ expect_exit "vaislisp strings pool and compare" 0 /bin/sh -c "printf '(if (= \"a
 expect_exit "vaislisp lists render and reduce" 0 /bin/sh -c "printf '(define xs (list 1 2 3))\n(defun lsum (l) (if (null? l) 0 (+ (car l) (lsum (cdr l)))))\n(lsum xs)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 6'"
 expect_exit "vaislisp cons prints list shape" 0 /bin/sh -c "printf '(list 1 2 3)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= (1 2 3)'"
 expect_exit "vaislisp lambda composes higher-order" 0 /bin/sh -c "printf '(define twice (lambda (f x) (f (f x))))\n(twice (lambda (n) (* n 3)) 4)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 36'"
+expect_exit "vaislisp let binds and restores shadows" 0 /bin/sh -c "printf '(begin (define x 42) (let ((x 7)) x) x)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
+expect_exit "vaislisp let bindings see earlier ones" 0 /bin/sh -c "printf '(let ((a 6) (b (* a 7))) b)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
+expect_exit "vaislisp quote sugar builds data" 0 /bin/sh -c "printf \"'(1 2 3)\\n\" | '$lisp_dist/bin/vaislisp' repl | grep -qx '= (1 2 3)'"
+expect_exit "vaislisp quoted symbol interns as string" 0 /bin/sh -c "printf \"(str-len 'hello)\\n\" | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 5'"
+expect_exit "vaislisp str-ref and str-byte index strings" 0 /bin/sh -c "printf '(str-cat (str-ref \"vais\" 0) \"ok\")\n(str-byte \"abc\" 2)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 99'"
 expect_exit "vaislisp repl exits clean at EOF" 0 /bin/sh -c "printf '(str-cat \"a\" \"b\")\n' | '$lisp_dist/bin/vaislisp' repl >/dev/null"
 
 vbox_dist="$tmp/vaisbox-dist"
