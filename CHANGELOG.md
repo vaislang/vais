@@ -4,6 +4,41 @@
 
 ### Added
 
+- vaisjq, the fifteenth installable tool: an integer JSON parser and
+  jq-subset query tool built on the vaislisp tagged-Int encoding — a
+  string pool plus one shared (key, val, next) cell heap serving both
+  arrays and objects. Filters cover `.` identity, `.name` field
+  chains, `[N]` array indexes, `[]` iteration (arrays emit elements,
+  objects emit values), and one `| length` / `| keys` pipe tail
+  (keys sorts); missing fields and out-of-range indexes chain as
+  null, jq-style. Output is pretty two-space JSON by default and
+  compact with `-c`; input is a file argument or stdin. Non-integer
+  numbers, `\u` escapes, wrong-type access, and trailing garbage are
+  loud exit-3 errors; integers stay within the +/-1e15 band. The
+  package self-test carries 31 cases, the workflow gate adds twelve
+  vaisjq cases, and vaisbox dispatches it as roster applet fifteen
+  (self-test arithmetic 15 * 3 - 3 = 42).
+
+### Fixed
+
+- Functions now carry up to sixteen parameters on both engines: the
+  self-host core's Fn model grew from ten slots (p0..p9) to sixteen
+  (p0..p15) across the parser fill chains, the SSA header, parameter
+  slot registration, and all three call-site argument chains — an
+  eleventh parameter previously overwrote the tenth slot and reached
+  codegen as an unresolved `%v-1` name. The front rejects seventeen
+  or more loudly ("functions support at most 16 parameters"), e397
+  locks the sixteen-parameter shape, and the vaisjq eval_filter
+  helper (twelve parameters) is the product demand that surfaced it.
+
+- Unary minus is a real factor on the full engine: `-5` folds at
+  compile time and `-x`, `-f(...)`, and negative list-literal
+  elements lower as `0 - value`. The full engine previously emitted
+  a silent 0 for any leading minus — the corpus never noticed
+  because verified sources spell the idiom `0 - n` — which made
+  `let x = -5` a wrong-value divergence against the direct engine.
+  e398 locks the surface on both engines.
+
 - vaislisp surface round 4, driven by corpus friction: `(cond (test
   body...) ... (else body...))` runs the first truthy clause (a
   clause with an empty body yields its test value, no match yields

@@ -22926,6 +22926,39 @@ static int front_check_unknown_var_line(const char *path, int line_no, const cha
  * spellings remain after the content-based split: an empty `{ }` body,
  * and a nested-brace body without depth-1 semicolons (the splitter
  * only normalizes flat or `;`-separated one-liners). */
+/* The self-host core models at most 16 parameter slots per function
+ * (struct Fn p0..p15); a declaration beyond that used to overwrite the
+ * last slot silently and reach codegen with unresolved body names.
+ * Reject the shape loudly for both engines instead. */
+static int front_check_fn_param_cap(const char *path, int line_no, const char *probe) {
+    const char *s = skip_ws(probe);
+    if (!starts_with(s, "fn ") || is_ident_continue(s[2])) return 0;
+    const char *open = strchr(s, '(');
+    if (open == NULL) return 0;
+    int depth = 0;
+    int commas = 0;
+    int has_content = 0;
+    const char *close = NULL;
+    for (const char *c = open; *c != '\0'; c++) {
+        if (*c == '(') depth++;
+        else if (*c == ')') {
+            depth--;
+            if (depth == 0) { close = c; break; }
+        } else if (*c == '<') depth++;
+        else if (*c == '>') depth--;
+        else if (*c == ',' && depth == 1) commas++;
+        else if (depth >= 1 && *c != ' ' && *c != '\t') has_content = 1;
+    }
+    if (close == NULL || !has_content) return 0;
+    int npar = commas + 1;
+    if (npar <= 16) return 0;
+    fprintf(stderr,
+            "vais front: %s:%d: functions support at most 16 parameters (found %d)\n"
+            "  P4 help: group related values into a struct or split the helper.\n",
+            path, line_no, npar);
+    return 1;
+}
+
 static int front_check_one_line_fn_body(const char *path, int line_no, const char *line, const char *probe) {
     const char *t = skip_ws(probe);
     if (!starts_with(t, "fn ")) return 0;
@@ -23012,6 +23045,7 @@ static int check_front_contract_text(const char *text, const char *path) {
             front_register_param_vars(probe, var_names, &var_count);
         }
         front_register_match_binder_vars(probe, var_names, &var_count);
+        issues += front_check_fn_param_cap(path, line_no, probe);
         issues += front_check_one_line_fn_body(path, line_no, line, probe);
         issues += front_check_unknown_var_line(path, line_no, line, probe, var_names, var_count,
                                                callable_names, callable_count, callable_overflow,

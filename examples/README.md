@@ -412,6 +412,16 @@ inside tuple-returning bodies (self-recursive and cross-function),
 `examples/e395_one_line_fn_bodies.vais` for one-line flat fn bodies (tail
 expression, `Str` literal, and `;`-joined statements) normalizing to the
 multiline form on both engines,
+`examples/e396_vaisjq_package` for the installable vaisjq JSON query tool —
+an integer JSON parser over tagged-Int values (string pool plus a shared
+(key, val, next) cell heap for arrays and objects) with jq-subset filters
+(field chains, indexes, `[]` iteration, `| length` / `| keys`), pretty and
+compact rendering, and loud parse/type/file errors,
+`examples/e397_sixteen_params.vais` for sixteen-parameter functions on both
+engines (Int, Str, and List parameters mixed; seventeen rejects at the
+front),
+`examples/e398_unary_minus.vais` for unary minus as a factor (folded
+literals, negated variables and calls, negative list-literal elements),
 `examples/e356_str_eq_call_operand.vais` for runtime Str equality against a
 string-returning call operand,
 `examples/e352_str_param_equality.vais` for runtime Str equality between

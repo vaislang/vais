@@ -421,3 +421,6 @@ examples/e392_time_sleep_millis.vais	native-supported	time_sleep_millis sleeps a
 examples/e393_vaislisp_package/src/main.vais	native-supported	Installable vaislisp integer Lisp interpreter: token-span evaluation through (value, next) tuple recursion, defun save/restore frames, a stdin_read_line REPL, and file mode.
 examples/e394_tuple_destructure_in_tuple_body.vais	native-supported	Tuple destructuring lowers inside tuple-returning bodies, self-recursive and cross-function alike.
 examples/e395_one_line_fn_bodies.vais	native-supported	One-line fn bodies normalize when flat (tail expression, return, or semicolon-separated statements); empty and nested-unsplittable one-liners reject at the front.
+examples/e396_vaisjq_package/src/main.vais	native-supported	vaisjq: integer JSON parser and jq-subset query tool over tagged-Int values (fields, indexes, iteration, length/keys, pretty and compact rendering).
+examples/e397_sixteen_params.vais	native-supported	Functions carry sixteen parameters on both engines (self-host Fn slots p0..p15; seventeen rejects at the front).
+examples/e398_unary_minus.vais	native-supported	Unary minus as a factor: folded literals, negated variables and calls, and negative list-literal elements.

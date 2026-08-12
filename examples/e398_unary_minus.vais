@@ -1,0 +1,19 @@
+# expect: 42
+# Unary minus is a factor on both engines: literals fold at compile time
+# and variables, calls, and list-literal elements lower as 0 - value.
+# The full engine used to emit a silent 0 for every leading minus.
+
+fn twice(n: Int) -> Int {
+    return n * 2
+}
+
+fn main() -> Int {
+    let x = -5
+    let y = 5
+    let a = -y
+    let b = 3 - -4
+    let c = -twice(3)
+    let xs: List<Int> = [-8, 2]
+    let d = xs[0] + xs[1]
+    return x + a + b + c + d + 57
+}

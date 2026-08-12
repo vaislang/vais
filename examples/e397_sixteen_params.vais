@@ -1,0 +1,21 @@
+# expect: 42
+# Functions carry up to sixteen parameters on both engines: the self-host
+# core models slots p0..p15 (declarations beyond sixteen are rejected by
+# the front). The vaisjq eval_filter helper is the product demand.
+
+fn gather(a0: Int, a1: Int, a2: Int, a3: Int, a4: Int, a5: Int, a6: Int, a7: Int, a8: Int, a9: Int, a10: Int, a11: Int, a12: Int, tag: Str, xs: List<Int>, ys: List<Int>) -> Int {
+    let mut sum = a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 + a11 + a12
+    sum = sum + tag.len()
+    sum = sum + xs[0] + ys[1]
+    xs.push(sum)
+    return sum
+}
+
+fn main() -> Int {
+    let xs: List<Int> = [-40]
+    let ys: List<Int> = [9, 2]
+    let got = gather(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, "ab", xs, ys)
+    if xs.len() != 2 { return 1 }
+    if xs[1] != got { return 2 }
+    return got
+}

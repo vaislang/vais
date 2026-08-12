@@ -20,16 +20,19 @@ struct Op { kind: Int, val: Int, next: Int }
 # A declared variable: source name range -> it lives at alloca %v<slot>.
 # is_arr: 0=scalar/struct, 1=array, 2=List local, 3=string, 4=List param, 5=Map concrete local, 6=Map concrete param.
 struct Slot { nstart: Int, nlen: Int, slot: Int, is_arr: Int, alen: Int, sty: Int }
-# A function: name range, up to 10 params (p0s/p0l..p9s/p9l + p0ty..p9ty), param
-# count `npar`, and the body token range [bstart, bend). 10 params covers the
-# file-source helper functions such as fixpoint2.vais word_is.
+# A function: name range, up to 16 params (p0s/p0l..p15s/p15l + p0ty..p15ty),
+# param count `npar`, and the body token range [bstart, bend). 16 params covers
+# the product helpers (vaisjq eval_filter carries 12); the front rejects
+# declarations beyond 16 loudly.
 struct Fn {
     nstart: Int, nlen: Int,
     p0s: Int, p0l: Int, p1s: Int, p1l: Int, p2s: Int, p2l: Int, p3s: Int, p3l: Int,
     p4s: Int, p4l: Int, p5s: Int, p5l: Int, p6s: Int, p6l: Int, p7s: Int, p7l: Int,
-    p8s: Int, p8l: Int, p9s: Int, p9l: Int,
+    p8s: Int, p8l: Int, p9s: Int, p9l: Int, p10s: Int, p10l: Int, p11s: Int, p11l: Int,
+    p12s: Int, p12l: Int, p13s: Int, p13l: Int, p14s: Int, p14l: Int, p15s: Int, p15l: Int,
     p0ty: Int, p1ty: Int, p2ty: Int, p3ty: Int,
     p4ty: Int, p5ty: Int, p6ty: Int, p7ty: Int, p8ty: Int, p9ty: Int,
+    p10ty: Int, p11ty: Int, p12ty: Int, p13ty: Int, p14ty: Int, p15ty: Int,
     npar: Int,
     bstart: Int, bend: Int,
     retlist: Int, retty: Int
@@ -1096,6 +1099,12 @@ fn fn_param_is_str(f: Fn, src: Str, qs: Int, ql: Int) -> Int {
     if f.npar >= 8 { if f.p7ty == 1 { if name_eq(src, f.p7s, f.p7l, qs, ql) == 1 { return 1 } } }
     if f.npar >= 9 { if f.p8ty == 1 { if name_eq(src, f.p8s, f.p8l, qs, ql) == 1 { return 1 } } }
     if f.npar >= 10 { if f.p9ty == 1 { if name_eq(src, f.p9s, f.p9l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 11 { if f.p10ty == 1 { if name_eq(src, f.p10s, f.p10l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 12 { if f.p11ty == 1 { if name_eq(src, f.p11s, f.p11l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 13 { if f.p12ty == 1 { if name_eq(src, f.p12s, f.p12l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 14 { if f.p13ty == 1 { if name_eq(src, f.p13s, f.p13l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 15 { if f.p14ty == 1 { if name_eq(src, f.p14s, f.p14l, qs, ql) == 1 { return 1 } } }
+    if f.npar >= 16 { if f.p15ty == 1 { if name_eq(src, f.p15s, f.p15l, qs, ql) == 1 { return 1 } } }
     return 0
 }
 
@@ -1705,7 +1714,13 @@ fn call_param_ty(fns: &List<Fn>, src: Str, qs: Int, ql: Int, argpos: Int) -> Int
     if argpos == 6 { return f.p6ty }
     if argpos == 7 { return f.p7ty }
     if argpos == 8 { return f.p8ty }
-    return f.p9ty
+    if argpos == 9 { return f.p9ty }
+    if argpos == 10 { return f.p10ty }
+    if argpos == 11 { return f.p11ty }
+    if argpos == 12 { return f.p12ty }
+    if argpos == 13 { return f.p13ty }
+    if argpos == 14 { return f.p14ty }
+    return f.p15ty
 }
 # If the token at `vp` is a call `<ident> (` to a List-returning function, returns
 # that function's retty (List<Str> is -2, List<Int> is -1, struct lists are >=0).
@@ -1829,6 +1844,18 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
             let mut p8l = 0
             let mut p9s = 0
             let mut p9l = 0
+            let mut p10s = 0
+            let mut p10l = 0
+            let mut p11s = 0
+            let mut p11l = 0
+            let mut p12s = 0
+            let mut p12l = 0
+            let mut p13s = 0
+            let mut p13l = 0
+            let mut p14s = 0
+            let mut p14l = 0
+            let mut p15s = 0
+            let mut p15l = 0
             let mut p0ty = 0
             let mut p1ty = 0
             let mut p2ty = 0
@@ -1839,6 +1866,12 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
             let mut p7ty = 0
             let mut p8ty = 0
             let mut p9ty = 0
+            let mut p10ty = 0
+            let mut p11ty = 0
+            let mut p12ty = 0
+            let mut p13ty = 0
+            let mut p14ty = 0
+            let mut p15ty = 0
             let mut npar = 0
             let mut q = popen + 1
             let mut gp = true
@@ -1920,7 +1953,13 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                     else if npar == 7 { p6ty = pty }
                     else if npar == 8 { p7ty = pty }
                     else if npar == 9 { p8ty = pty }
-                    else { p9ty = pty }
+                    else if npar == 10 { p9ty = pty }
+                    else if npar == 11 { p10ty = pty }
+                    else if npar == 12 { p11ty = pty }
+                    else if npar == 13 { p12ty = pty }
+                    else if npar == 14 { p13ty = pty }
+                    else if npar == 15 { p14ty = pty }
+                    else { p15ty = pty }
                     # advance past the type. List<...> and Map<...> span to the closing `>`
                     # (kind 19); a plain type is a single ident.
                     if islist == 1 or is_map_param_ty(mpty) or is_result_ty(rpty) {
@@ -1945,7 +1984,13 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                     else if npar == 6 { p6s = qt.nstart; p6l = qt.nlen }
                     else if npar == 7 { p7s = qt.nstart; p7l = qt.nlen }
                     else if npar == 8 { p8s = qt.nstart; p8l = qt.nlen }
-                    else { p9s = qt.nstart; p9l = qt.nlen }
+                    else if npar == 9 { p9s = qt.nstart; p9l = qt.nlen }
+                    else if npar == 10 { p10s = qt.nstart; p10l = qt.nlen }
+                    else if npar == 11 { p11s = qt.nstart; p11l = qt.nlen }
+                    else if npar == 12 { p12s = qt.nstart; p12l = qt.nlen }
+                    else if npar == 13 { p13s = qt.nstart; p13l = qt.nlen }
+                    else if npar == 14 { p14s = qt.nstart; p14l = qt.nlen }
+                    else { p15s = qt.nstart; p15l = qt.nlen }
                     npar = npar + 1
                     q = q + 1
                 }
@@ -2067,8 +2112,12 @@ fn build_fns(toks: &List<Token>, defs: &List<StructDef>, src: Str, n: Int) -> Li
                 p0s: p0s, p0l: p0l, p1s: p1s, p1l: p1l, p2s: p2s, p2l: p2l, p3s: p3s, p3l: p3l,
                 p4s: p4s, p4l: p4l, p5s: p5s, p5l: p5l, p6s: p6s, p6l: p6l, p7s: p7s, p7l: p7l,
                 p8s: p8s, p8l: p8l, p9s: p9s, p9l: p9l,
+                p10s: p10s, p10l: p10l, p11s: p11s, p11l: p11l,
+                p12s: p12s, p12l: p12l, p13s: p13s, p13l: p13l,
+                p14s: p14s, p14l: p14l, p15s: p15s, p15l: p15l,
                 p0ty: p0ty, p1ty: p1ty, p2ty: p2ty, p3ty: p3ty,
                 p4ty: p4ty, p5ty: p5ty, p6ty: p6ty, p7ty: p7ty, p8ty: p8ty, p9ty: p9ty,
+                p10ty: p10ty, p11ty: p11ty, p12ty: p12ty, p13ty: p13ty, p14ty: p14ty, p15ty: p15ty,
                 npar: npar,
                 bstart: bstart, bend: be,
                 retlist: retlist, retty: retty
@@ -3480,6 +3529,23 @@ fn emit_struct_return_field_call(toks: &List<Token>, slots: &List<Slot>, fns: &L
 fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List<StructDef>, src: Str, i: Int, counter: Int) -> Op {
     let t = toks[i]
     if t.kind == 0 { return Op { kind: 0, val: t.value, next: counter } }
+    if t.kind == 4 {
+        # unary minus factor: fold a literal directly, lower anything else
+        # as 0 - <factor>. Historically this silently generated 0 (the
+        # corpus wrote `0 - n` everywhere), which made `-5` a wrong-value
+        # divergence against the direct engine.
+        let nt = toks[i + 1]
+        if nt.kind == 0 { return Op { kind: 0, val: 0 - nt.value, next: counter } }
+        let neg0 = gen_factor(toks, slots, fns, defs, src, i + 1, counter)
+        let neg = factor_len_fixup(toks, src, neg0, i + 1, skip_factor(toks, src, i + 1))
+        let nd = neg.next
+        emit_str("  %t")
+        pint(nd)
+        emit_str(" = sub i64 0, ")
+        emit_op(neg)
+        putchar(10)
+        return Op { kind: 1, val: nd, next: nd + 1 }
+    }
     if t.kind == 42 {
         let arg0 = gen_factor(toks, slots, fns, defs, src, i + 1, counter)
         let arg = factor_len_fixup(toks, src, arg0, i + 1, skip_factor(toks, src, i + 1))
@@ -4303,6 +4369,18 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let mut a8v = 0
             let mut a9k = 0
             let mut a9v = 0
+            let mut a10k = 0
+            let mut a10v = 0
+            let mut a11k = 0
+            let mut a11v = 0
+            let mut a12k = 0
+            let mut a12v = 0
+            let mut a13k = 0
+            let mut a13v = 0
+            let mut a14k = 0
+            let mut a14v = 0
+            let mut a15k = 0
+            let mut a15v = 0
             # slots of List-local args passed by pointer, to sync length AFTER the
             # call (the callee may have pushed). -1 = none. li/lb carry the length
             # index + buffer array-size per arg (scalar: 63/64; struct: 64*nf/64*nf+1).
@@ -4316,6 +4394,12 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let mut ls7 = 0 - 1
             let mut ls8 = 0 - 1
             let mut ls9 = 0 - 1
+            let mut ls10 = 0 - 1
+            let mut ls11 = 0 - 1
+            let mut ls12 = 0 - 1
+            let mut ls13 = 0 - 1
+            let mut ls14 = 0 - 1
+            let mut ls15 = 0 - 1
             let mut li0 = list_lenidx()
             let mut li1 = list_lenidx()
             let mut li2 = list_lenidx()
@@ -4326,6 +4410,12 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let mut li7 = list_lenidx()
             let mut li8 = list_lenidx()
             let mut li9 = list_lenidx()
+            let mut li10 = list_lenidx()
+            let mut li11 = list_lenidx()
+            let mut li12 = list_lenidx()
+            let mut li13 = list_lenidx()
+            let mut li14 = list_lenidx()
+            let mut li15 = list_lenidx()
             let mut lb0 = list_cap()
             let mut lb1 = list_cap()
             let mut lb2 = list_cap()
@@ -4336,6 +4426,12 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             let mut lb7 = list_cap()
             let mut lb8 = list_cap()
             let mut lb9 = list_cap()
+            let mut lb10 = list_cap()
+            let mut lb11 = list_cap()
+            let mut lb12 = list_cap()
+            let mut lb13 = list_cap()
+            let mut lb14 = list_cap()
+            let mut lb15 = list_cap()
             let mut cc = counter
             let mut q = i + 2
             let mut ga = true
@@ -4426,7 +4522,13 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                                 else if nargs == 6 { ls6 = lslot; li6 = alenidx; lb6 = albufsz }
                                 else if nargs == 7 { ls7 = lslot; li7 = alenidx; lb7 = albufsz }
                                 else if nargs == 8 { ls8 = lslot; li8 = alenidx; lb8 = albufsz }
-                                else { ls9 = lslot; li9 = alenidx; lb9 = albufsz }
+                                else if nargs == 9 { ls9 = lslot; li9 = alenidx; lb9 = albufsz }
+                                else if nargs == 10 { ls10 = lslot; li10 = alenidx; lb10 = albufsz }
+                                else if nargs == 11 { ls11 = lslot; li11 = alenidx; lb11 = albufsz }
+                                else if nargs == 12 { ls12 = lslot; li12 = alenidx; lb12 = albufsz }
+                                else if nargs == 13 { ls13 = lslot; li13 = alenidx; lb13 = albufsz }
+                                else if nargs == 14 { ls14 = lslot; li14 = alenidx; lb14 = albufsz }
+                                else { ls15 = lslot; li15 = alenidx; lb15 = albufsz }
                                 handled = 1
                             } else if aarr == 4 {
                                 # List parameter forwarded to another function:
@@ -4586,7 +4688,13 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                     else if nargs == 6 { a6k = ekind; a6v = eval2 }
                     else if nargs == 7 { a7k = ekind; a7v = eval2 }
                     else if nargs == 8 { a8k = ekind; a8v = eval2 }
-                    else { a9k = ekind; a9v = eval2 }
+                    else if nargs == 9 { a9k = ekind; a9v = eval2 }
+                    else if nargs == 10 { a10k = ekind; a10v = eval2 }
+                    else if nargs == 11 { a11k = ekind; a11v = eval2 }
+                    else if nargs == 12 { a12k = ekind; a12v = eval2 }
+                    else if nargs == 13 { a13k = ekind; a13v = eval2 }
+                    else if nargs == 14 { a14k = ekind; a14v = eval2 }
+                    else { a15k = ekind; a15v = eval2 }
                     nargs = nargs + 1
                     q = astop + 1
                 }
@@ -4614,6 +4722,12 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
                 else if ai == 7 { ak = a7k; av = a7v }
                 else if ai == 8 { ak = a8k; av = a8v }
                 else if ai == 9 { ak = a9k; av = a9v }
+                else if ai == 10 { ak = a10k; av = a10v }
+                else if ai == 11 { ak = a11k; av = a11v }
+                else if ai == 12 { ak = a12k; av = a12v }
+                else if ai == 13 { ak = a13k; av = a13v }
+                else if ai == 14 { ak = a14k; av = a14v }
+                else if ai == 15 { ak = a15k; av = a15v }
                 # kind 2 = i8* (string pointer); else i64.
                 if ak == 2 { emit_str("i8* ") } else if ak == 3 { emit_str("i64* ") } else { emit_str("i64 ") }
                 emit_op(Op { kind: ak, val: av, next: 0 })
@@ -4634,6 +4748,12 @@ fn gen_factor(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &Lis
             rc = sync_list_len(ls7, li7, lb7, rc)
             rc = sync_list_len(ls8, li8, lb8, rc)
             rc = sync_list_len(ls9, li9, lb9, rc)
+            rc = sync_list_len(ls10, li10, lb10, rc)
+            rc = sync_list_len(ls11, li11, lb11, rc)
+            rc = sync_list_len(ls12, li12, lb12, rc)
+            rc = sync_list_len(ls13, li13, lb13, rc)
+            rc = sync_list_len(ls14, li14, lb14, rc)
+            rc = sync_list_len(ls15, li15, lb15, rc)
             if retstr == 1 {
                 # A trailing `.len()` on a Str-returning call is skipped
                 # positionally by skip_factor, so it must be emitted here or
@@ -9029,6 +9149,7 @@ fn trailing_len_call_end(toks: &List<Token>, src: Str, pos: Int) -> Int {
 # array index = name '[' ... ']'.
 fn skip_factor(toks: &List<Token>, src: Str, i: Int) -> Int {
     let t = toks[i]
+    if t.kind == 4 { return skip_factor(toks, src, i + 1) }
     if t.kind == 42 { return skip_factor(toks, src, i + 1) }
     if t.kind == 9 {
         # parenthesized group `( ... )` -> skip to just past the matching ')'.
@@ -12360,6 +12481,18 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
     let mut a8v = 0
     let mut a9k = 0
     let mut a9v = 0
+    let mut a10k = 0
+    let mut a10v = 0
+    let mut a11k = 0
+    let mut a11v = 0
+    let mut a12k = 0
+    let mut a12v = 0
+    let mut a13k = 0
+    let mut a13v = 0
+    let mut a14k = 0
+    let mut a14v = 0
+    let mut a15k = 0
+    let mut a15v = 0
     let mut ls0 = 0 - 1
     let mut ls1 = 0 - 1
     let mut ls2 = 0 - 1
@@ -12370,6 +12503,12 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
     let mut ls7 = 0 - 1
     let mut ls8 = 0 - 1
     let mut ls9 = 0 - 1
+    let mut ls10 = 0 - 1
+    let mut ls11 = 0 - 1
+    let mut ls12 = 0 - 1
+    let mut ls13 = 0 - 1
+    let mut ls14 = 0 - 1
+    let mut ls15 = 0 - 1
     let mut li0 = list_lenidx()
     let mut li1 = list_lenidx()
     let mut li2 = list_lenidx()
@@ -12380,6 +12519,12 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
     let mut li7 = list_lenidx()
     let mut li8 = list_lenidx()
     let mut li9 = list_lenidx()
+    let mut li10 = list_lenidx()
+    let mut li11 = list_lenidx()
+    let mut li12 = list_lenidx()
+    let mut li13 = list_lenidx()
+    let mut li14 = list_lenidx()
+    let mut li15 = list_lenidx()
     let mut lb0 = list_cap()
     let mut lb1 = list_cap()
     let mut lb2 = list_cap()
@@ -12390,6 +12535,12 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
     let mut lb7 = list_cap()
     let mut lb8 = list_cap()
     let mut lb9 = list_cap()
+    let mut lb10 = list_cap()
+    let mut lb11 = list_cap()
+    let mut lb12 = list_cap()
+    let mut lb13 = list_cap()
+    let mut lb14 = list_cap()
+    let mut lb15 = list_cap()
     let mut cc = counter
     let mut q = q0
     let mut ga = true
@@ -12471,7 +12622,13 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
                         else if nargs == 6 { ls6 = lslot; li6 = alenidx; lb6 = albufsz }
                         else if nargs == 7 { ls7 = lslot; li7 = alenidx; lb7 = albufsz }
                         else if nargs == 8 { ls8 = lslot; li8 = alenidx; lb8 = albufsz }
-                        else { ls9 = lslot; li9 = alenidx; lb9 = albufsz }
+                        else if nargs == 9 { ls9 = lslot; li9 = alenidx; lb9 = albufsz }
+                        else if nargs == 10 { ls10 = lslot; li10 = alenidx; lb10 = albufsz }
+                        else if nargs == 11 { ls11 = lslot; li11 = alenidx; lb11 = albufsz }
+                        else if nargs == 12 { ls12 = lslot; li12 = alenidx; lb12 = albufsz }
+                        else if nargs == 13 { ls13 = lslot; li13 = alenidx; lb13 = albufsz }
+                        else if nargs == 14 { ls14 = lslot; li14 = alenidx; lb14 = albufsz }
+                        else { ls15 = lslot; li15 = alenidx; lb15 = albufsz }
                         handled = 1
                     } else if aarr == 4 {
                         let lslot = find_slot(slots, src, argt.nstart, argt.nlen)
@@ -12627,7 +12784,13 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
             else if nargs == 6 { a6k = ekind; a6v = eval2 }
             else if nargs == 7 { a7k = ekind; a7v = eval2 }
             else if nargs == 8 { a8k = ekind; a8v = eval2 }
-            else { a9k = ekind; a9v = eval2 }
+            else if nargs == 9 { a9k = ekind; a9v = eval2 }
+            else if nargs == 10 { a10k = ekind; a10v = eval2 }
+            else if nargs == 11 { a11k = ekind; a11v = eval2 }
+            else if nargs == 12 { a12k = ekind; a12v = eval2 }
+            else if nargs == 13 { a13k = ekind; a13v = eval2 }
+            else if nargs == 14 { a14k = ekind; a14v = eval2 }
+            else { a15k = ekind; a15v = eval2 }
             nargs = nargs + 1
             q = astop + 1
         }
@@ -12650,6 +12813,12 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
         else if ai == 7 { ak = a7k; av = a7v }
         else if ai == 8 { ak = a8k; av = a8v }
         else if ai == 9 { ak = a9k; av = a9v }
+        else if ai == 10 { ak = a10k; av = a10v }
+        else if ai == 11 { ak = a11k; av = a11v }
+        else if ai == 12 { ak = a12k; av = a12v }
+        else if ai == 13 { ak = a13k; av = a13v }
+        else if ai == 14 { ak = a14k; av = a14v }
+        else if ai == 15 { ak = a15k; av = a15v }
         if ak == 2 { emit_str("i8* ") } else if ak == 3 { emit_str("i64* ") } else { emit_str("i64 ") }
         emit_op(Op { kind: ak, val: av, next: 0 })
         ai = ai + 1
@@ -12670,6 +12839,12 @@ fn emit_struct_out_call(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, 
     rc = sync_list_len(ls7, li7, lb7, rc)
     rc = sync_list_len(ls8, li8, lb8, rc)
     rc = sync_list_len(ls9, li9, lb9, rc)
+    rc = sync_list_len(ls10, li10, lb10, rc)
+    rc = sync_list_len(ls11, li11, lb11, rc)
+    rc = sync_list_len(ls12, li12, lb12, rc)
+    rc = sync_list_len(ls13, li13, lb13, rc)
+    rc = sync_list_len(ls14, li14, lb14, rc)
+    rc = sync_list_len(ls15, li15, lb15, rc)
     return rc
 }
 
@@ -13976,6 +14151,18 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                 let mut a8v = 0
                 let mut a9k = 0
                 let mut a9v = 0
+                let mut a10k = 0
+                let mut a10v = 0
+                let mut a11k = 0
+                let mut a11v = 0
+                let mut a12k = 0
+                let mut a12v = 0
+                let mut a13k = 0
+                let mut a13v = 0
+                let mut a14k = 0
+                let mut a14v = 0
+                let mut a15k = 0
+                let mut a15v = 0
                 let mut nca = 0
                 let mut cc = counter
                 let mut q = vp + 2
@@ -14172,7 +14359,13 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                         else if nca == 6 { a6k = ek; a6v = ev }
                         else if nca == 7 { a7k = ek; a7v = ev }
                         else if nca == 8 { a8k = ek; a8v = ev }
-                        else { a9k = ek; a9v = ev }
+                        else if nca == 9 { a9k = ek; a9v = ev }
+                        else if nca == 10 { a10k = ek; a10v = ev }
+                        else if nca == 11 { a11k = ek; a11v = ev }
+                        else if nca == 12 { a12k = ek; a12v = ev }
+                        else if nca == 13 { a13k = ek; a13v = ev }
+                        else if nca == 14 { a14k = ek; a14v = ev }
+                        else { a15k = ek; a15v = ev }
                         nca = nca + 1
                         q = astop + 1
                     }
@@ -14208,6 +14401,12 @@ fn gen_stmts(toks: &List<Token>, slots: &List<Slot>, fns: &List<Fn>, defs: &List
                     else if ai == 7 { ak = a7k; av = a7v }
                     else if ai == 8 { ak = a8k; av = a8v }
                     else if ai == 9 { ak = a9k; av = a9v }
+                    else if ai == 10 { ak = a10k; av = a10v }
+                    else if ai == 11 { ak = a11k; av = a11v }
+                    else if ai == 12 { ak = a12k; av = a12v }
+                    else if ai == 13 { ak = a13k; av = a13v }
+                    else if ai == 14 { ak = a14k; av = a14v }
+                    else if ai == 15 { ak = a15k; av = a15v }
                     if ak == 2 { emit_str("i8* ") } else if ak == 3 { emit_str("i64* ") } else { emit_str("i64 ") }
                     emit_op(Op { kind: ak, val: av, next: 0 })
                     ai = ai + 1
@@ -19753,6 +19952,9 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         if pi == 1 { pty = f.p1ty } else if pi == 2 { pty = f.p2ty } else if pi == 3 { pty = f.p3ty }
         else if pi == 4 { pty = f.p4ty } else if pi == 5 { pty = f.p5ty } else if pi == 6 { pty = f.p6ty } else if pi == 7 { pty = f.p7ty }
         else if pi == 8 { pty = f.p8ty } else if pi == 9 { pty = f.p9ty }
+        else if pi == 10 { pty = f.p10ty } else if pi == 11 { pty = f.p11ty }
+        else if pi == 12 { pty = f.p12ty } else if pi == 13 { pty = f.p13ty }
+        else if pi == 14 { pty = f.p14ty } else if pi == 15 { pty = f.p15ty }
         # Str -> i8*, List/Map/Struct -> i64* (buffer pointer), Result scalars and Int -> i64.
         if pty == 1 { emit_str("i8* %a") } else if pty == 2 or is_map_param_ty(pty) { emit_str("i64* %a") } else if pty >= 3 { emit_str("i64* %a") } else { emit_str("i64 %a") }
         pint(pi)
@@ -19784,6 +19986,12 @@ fn emit_fn(toks: &List<Token>, fns: &List<Fn>, defs: &List<StructDef>, src: Str,
         else if s2 == 7 { pns = f.p7s; pnl = f.p7l; pty = f.p7ty }
         else if s2 == 8 { pns = f.p8s; pnl = f.p8l; pty = f.p8ty }
         else if s2 == 9 { pns = f.p9s; pnl = f.p9l; pty = f.p9ty }
+        else if s2 == 10 { pns = f.p10s; pnl = f.p10l; pty = f.p10ty }
+        else if s2 == 11 { pns = f.p11s; pnl = f.p11l; pty = f.p11ty }
+        else if s2 == 12 { pns = f.p12s; pnl = f.p12l; pty = f.p12ty }
+        else if s2 == 13 { pns = f.p13s; pnl = f.p13l; pty = f.p13ty }
+        else if s2 == 14 { pns = f.p14s; pnl = f.p14l; pty = f.p14ty }
+        else if s2 == 15 { pns = f.p15s; pnl = f.p15l; pty = f.p15ty }
         if pty == 1 {
             slots.push(Slot { nstart: pns, nlen: pnl, slot: s2, is_arr: 3, alen: 0 , sty: 0 - 1 })
             emit_str("  %v")

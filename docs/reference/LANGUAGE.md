@@ -137,6 +137,10 @@ fn main() -> Int {
 Verified today:
 
 - `Int` parameters and `Int` return values.
+- Up to sixteen parameters per function on both engines (the self-host
+  core models slots p0..p15; a seventeenth parameter is rejected by the
+  front with a dedicated message), locked by
+  `examples/e397_sixteen_params.vais`.
 - Multiple helper functions.
 - Recursive and mutually recursive `Int` functions.
 - Generic marker syntax for simple `Int` helper cases and generic identity
@@ -254,6 +258,11 @@ return a < b and b < c
 Verified operators:
 
 - Arithmetic: `+`, `-`, `*`, `/`, `%`
+- Unary minus as a factor (`-5`, `-x`, `-f(...)`, and negative
+  list-literal elements): literals fold at compile time and the rest
+  lowers as `0 - value` on both engines
+  (`examples/e398_unary_minus.vais` — the full engine previously
+  emitted a silent 0 for any leading minus)
 - Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
 - Boolean words: `and`, `or`, `not`
 - `and` and `or` short-circuit on both engines and normalize to 0/1:

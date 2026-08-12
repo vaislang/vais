@@ -22,7 +22,31 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-12c) — vaislisp 표면 4라운드: cond/and·or/else-옵션 if
+## 현재 작업 (2026-08-12d) — vaisjq: JSON 파서 + jq 부분집합 (15호 도구)
+모드: 개별선택 (파서 클래스 첫 실증 — mini-jq)
+- [x] 1. vaisjq 본체 ✅ 2026-08-12 — e396 패키지: 정수 JSON 파서(태그드
+      Int — 문자열 풀 + 배열/객체 공용 (key,val,next) 셀 힙), 필터
+      (.name 체인/[N]/[] 반복/| length·keys), pretty 기본+-c compact,
+      결측 필드 null 체이닝, 비정수/\u/타입 오류/트레일링 전부 LOUD
+      exit 3. self-test 31케이스.
+- [x] 2. 경유 컴파일러 root-fix 2건 ✅ — **파라미터 10→16 확장**(Fn
+      p0..p15: 파서 필 체인/SSA 헤더/슬롯 등록/호출측 3사이트 — 11번째
+      부터 p9 덮어쓰기→%v-1 미해결이 실증, eval_filter 12파라미터가
+      수요; front "at most 16 parameters" 거부 + e397 잠금) + **단항
+      마이너스 factor**(full이 선행 마이너스를 silent 0 방출 — 코퍼스
+      가 `0 - n` 관용이라 잠복, direct와 값 발산; 리터럴 접기+`sub
+      i64 0` 로워링, e398 잠금). core 재생성 2회 전부 즉시 수렴.
+- [x] 3. 게이트 ✅ — 워크플로 vaisjq 12케이스 + vaisbox 로스터 15
+      (15*3-3=42, wc 15, dispatch), front 17-param 거부 픽스처,
+      parity 3행(e396/e397/e398).
+- [x] 4. 문서 + 전체 래더 ✅ 2026-08-13 — LANGUAGE(16-param/단항
+      마이너스)/PRELUDE(15호)/README/CHANGELOG, fmt/front/direct/
+      fixpoint-full/test.sh 417/parity 417/self-host/release 전부
+      GREEN. 트랩: 패키지 parity 행은 `<pkg>/src/main.vais` 경로가
+      정본(디렉토리 경로는 host read 실패).
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-08-12c) — vaislisp 표면 4라운드: cond/and·or/else-옵션 if
 모드: 개별선택 (코퍼스 마찰 실증 기반 — 중첩 if 체인·else-0 패딩 해소)
 - [x] 1. 폼 3종 ✅ 2026-08-12 — cond(첫 truthy 절 실행, 빈 본문 절은
       test 값, 무매치 nil, else 예약)/and·or(값 의미 단락 — 결정 피연

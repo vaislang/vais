@@ -9002,6 +9002,18 @@ fn write_unknown_call(path: Str) -> Int {
     return fs_write_text(path, str_builder_finish(out))
 }
 
+fn write_seventeen_params(path: Str) -> Int {
+    let out = str_builder_new()
+    append_line(out, "fn toomany(b0: Int, b1: Int, b2: Int, b3: Int, b4: Int, b5: Int, b6: Int, b7: Int, b8: Int, b9: Int, b10: Int, b11: Int, b12: Int, b13: Int, b14: Int, b15: Int, b16: Int) -> Int {")
+    append_line(out, "    return b0")
+    append_line(out, "}")
+    append_line(out, "")
+    append_line(out, "fn main() -> Int {")
+    append_line(out, "    return 42")
+    append_line(out, "}")
+    return fs_write_text(path, str_builder_finish(out))
+}
+
 fn write_empty_fn_body(path: Str) -> Int {
     let out = str_builder_new()
     append_line(out, "fn ghost() -> Int { }")
@@ -9538,6 +9550,7 @@ fn write_reject_source(name: Str, path: Str) -> Int {
     if str_eq(name, "unknown_call") == 1 { return write_unknown_call(path) }
     if str_eq(name, "unknown_variable") == 1 { return write_unknown_variable(path) }
     if str_eq(name, "empty_fn_body") == 1 { return write_empty_fn_body(path) }
+    if str_eq(name, "seventeen_params") == 1 { return write_seventeen_params(path) }
     if str_eq(name, "nested_one_line_fn") == 1 { return write_nested_one_line_fn(path) }
     if str_eq(name, "brace_if_expr") == 1 { return write_brace_if_expr(path) }
     if str_eq(name, "helper_missing_return_type") == 1 { return write_helper_missing_return(path) }
@@ -10169,6 +10182,7 @@ fn main() -> Int {
     fail = fail + expect_reject(vaisc, tmp, "unknown_call", "call to an unknown function", "", "documented built-in")
     fail = fail + expect_reject(vaisc, tmp, "unknown_variable", "is not a defined variable in this function", "", "loop/match binder")
     fail = fail + expect_reject(vaisc, tmp, "empty_fn_body", "function bodies cannot be empty", "", "tail expression")
+    fail = fail + expect_reject(vaisc, tmp, "seventeen_params", "at most 16 parameters", "", "struct or split")
     fail = fail + expect_reject(vaisc, tmp, "nested_one_line_fn", "one-line function bodies with nested blocks", "", "across multiple lines")
     fail = fail + expect_reject(vaisc, tmp, "brace_if_expr", "if-expression values use `then`/`else`, not braces", "", "brace blocks are statements")
 

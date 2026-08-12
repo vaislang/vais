@@ -1,0 +1,887 @@
+# expect: 42
+# vaisjq: an integer JSON parser and jq-subset query tool. JSON values
+# are tagged Ints (the vaislisp encoding pattern): plain numbers live
+# inside +/-1e15, string values index a pool at the STR band, arrays
+# and objects index a shared cell heap through per-container head
+# slots at the ARR/OBJ bands, and true/false/null are reserved
+# constants. Cells are (key, val, next) triples in parallel lists —
+# arrays leave key at -1, objects point key at the pool — so one
+# recursive-descent parser and one renderer serve both shapes.
+#
+# Scope: integers only (a '.', 'e', or 'E' in a number is a loud
+# error, as is any |n| >= 1e15), string escapes \" \\ \/ \n \t \r
+# (\b, \f, and \uXXXX are loud errors), single top-level document
+# with trailing-garbage detection.
+#
+# Filters: `.` identity, `.name` field chains, `[N]` array index,
+# `[]` iteration (arrays emit elements, objects emit values), and one
+# optional pipe tail `| length` or `| keys` (keys sorts). Missing
+# fields and out-of-range indexes emit null and keep chaining (null
+# indexes to null, jq-style); indexing or iterating a value of the
+# wrong type is a loud error with exit 3.
+#
+# Modes: no arguments runs the deterministic self-test (the
+# release-corpus entry), `vaisjq [-c] <filter> [file]` queries a file
+# or stdin (`-` or no file argument), printing pretty two-space JSON
+# by default and compact JSON with -c. Exits: 0 query ok, 2 usage,
+# 3 parse/type/file error.
+
+fn num_band() -> Int { 1000000000000000 }
+
+fn str_base() -> Int { 2000000000000000 }
+
+fn arr_base() -> Int { 3000000000000000 }
+
+fn obj_base() -> Int { 4000000000000000 }
+
+fn true_val() -> Int { 5000000000000000 }
+
+fn false_val() -> Int { 5000000000000001 }
+
+fn null_val() -> Int { 6000000000000000 }
+
+fn err_val() -> Int { 6000000000000001 }
+
+fn is_num_val(v: Int) -> Int {
+    if v < num_band() {
+        if v > 0 - num_band() { return 1 }
+    }
+    0
+}
+
+fn is_str_val(v: Int) -> Int {
+    if v >= str_base() {
+        if v < arr_base() { return 1 }
+    }
+    0
+}
+
+fn is_arr_val(v: Int) -> Int {
+    if v >= arr_base() {
+        if v < obj_base() { return 1 }
+    }
+    0
+}
+
+fn is_obj_val(v: Int) -> Int {
+    if v >= obj_base() {
+        if v < true_val() { return 1 }
+    }
+    0
+}
+
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(msg)
+    let lf = stderr_write(str_byte(10))
+    0
+}
+
+fn intern(s: Str, spool: List<Str>) -> Int {
+    spool.push(s)
+    str_base() + spool.len() - 1
+}
+
+fn is_json_ws(c: Int) -> Int {
+    if c == 32 or c == 9 or c == 10 or c == 13 { return 1 }
+    0
+}
+
+fn is_ident_byte(b: Int) -> Int {
+    if b >= 97 {
+        if b <= 122 { return 1 }
+    }
+    if b >= 65 {
+        if b <= 90 { return 1 }
+    }
+    if b >= 48 {
+        if b <= 57 { return 1 }
+    }
+    if b == 95 { return 1 }
+    0
+}
+
+fn skip_json_ws(src: Str, pos: Int) -> Int {
+    let n = src.len()
+    let mut p = pos
+    while p < n {
+        if is_json_ws(src[p]) == 0 { return p }
+        p += 1
+    }
+    p
+}
+
+# Parse a JSON string literal starting at the opening quote; returns
+# (STR value, next-pos) or (err, pos) after a loud message.
+fn parse_json_string(src: Str, pos: Int, spool: List<Str>) -> (Int, Int) {
+    let n = src.len()
+    let b = str_builder_new()
+    let mut p = pos + 1
+    while p < n {
+        let c = src[p]
+        if c == 34 {
+            return (intern(str_builder_finish(b), spool), p + 1)
+        }
+        if c == 92 {
+            if p + 1 >= n {
+                eprint("error: unterminated escape in string")
+                return (err_val(), p)
+            }
+            let e = src[p + 1]
+            let mut mapped = 0 - 1
+            if e == 34 { mapped = 34 }
+            if e == 92 { mapped = 92 }
+            if e == 47 { mapped = 47 }
+            if e == 110 { mapped = 10 }
+            if e == 116 { mapped = 9 }
+            if e == 114 { mapped = 13 }
+            if mapped < 0 {
+                eprint("error: unsupported string escape")
+                return (err_val(), p)
+            }
+            let pushed = str_builder_push(b, mapped)
+            p += 2
+        } else {
+            if c < 32 {
+                eprint("error: raw control byte in string")
+                return (err_val(), p)
+            }
+            let pushed2 = str_builder_push(b, c)
+            p += 1
+        }
+    }
+    eprint("error: unterminated string")
+    (err_val(), p)
+}
+
+# Parse an integer; a fraction or exponent marker is a loud error.
+fn parse_json_number(src: Str, pos: Int) -> (Int, Int) {
+    let n = src.len()
+    let mut p = pos
+    let mut neg = 0
+    if src[p] == 45 {
+        neg = 1
+        p += 1
+    }
+    if p >= n {
+        eprint("error: lone minus sign")
+        return (err_val(), p)
+    }
+    let mut digits = 0
+    let mut acc = 0
+    while p < n {
+        let c = src[p]
+        if c >= 48 {
+            if c <= 57 {
+                acc = acc * 10 + (c - 48)
+                digits += 1
+                p += 1
+            } else { break }
+        } else { break }
+    }
+    if digits == 0 {
+        eprint("error: expected digits in number")
+        return (err_val(), p)
+    }
+    if digits > 15 {
+        eprint("error: number out of integer range")
+        return (err_val(), p)
+    }
+    if p < n {
+        let nx = src[p]
+        if nx == 46 or nx == 101 or nx == 69 {
+            eprint("error: non-integer numbers are unsupported")
+            return (err_val(), p)
+        }
+    }
+    if acc >= num_band() {
+        eprint("error: number out of integer range")
+        return (err_val(), p)
+    }
+    if neg == 1 {
+        return (0 - acc, p)
+    }
+    (acc, p)
+}
+
+fn match_word(src: Str, pos: Int, w: Str) -> Int {
+    let n = src.len()
+    let m = w.len()
+    if pos + m > n { return 0 }
+    let mut i = 0
+    while i < m {
+        if src[pos + i] != w[i] { return 0 }
+        i += 1
+    }
+    1
+}
+
+# Parse one JSON value at pos; returns (value, next-pos). Containers
+# allocate a head slot (first-cell index or -1) and chain cells of
+# (key, val, next): arrays keep key at -1, objects intern their keys.
+fn parse_json_value(src: Str, pos: Int, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> (Int, Int) {
+    let n = src.len()
+    let p0 = skip_json_ws(src, pos)
+    if p0 >= n {
+        eprint("error: unexpected end of input")
+        return (err_val(), p0)
+    }
+    let c = src[p0]
+    if c == 34 {
+        let (sv, sp) = parse_json_string(src, p0, spool)
+        return (sv, sp)
+    }
+    let mut numeric = 0
+    if c == 45 { numeric = 1 }
+    if c >= 48 {
+        if c <= 57 { numeric = 1 }
+    }
+    if numeric == 1 {
+        let (nv, np) = parse_json_number(src, p0)
+        return (nv, np)
+    }
+    if c == 116 {
+        if match_word(src, p0, "true") == 1 { return (true_val(), p0 + 4) }
+        eprint("error: bad literal")
+        return (err_val(), p0)
+    }
+    if c == 102 {
+        if match_word(src, p0, "false") == 1 { return (false_val(), p0 + 5) }
+        eprint("error: bad literal")
+        return (err_val(), p0)
+    }
+    if c == 110 {
+        if match_word(src, p0, "null") == 1 { return (null_val(), p0 + 4) }
+        eprint("error: bad literal")
+        return (err_val(), p0)
+    }
+    if c == 91 {
+        heads.push(0 - 1)
+        let hidx = heads.len() - 1
+        let mut p = skip_json_ws(src, p0 + 1)
+        if p < n {
+            if src[p] == 93 {
+                return (arr_base() + hidx, p + 1)
+            }
+        }
+        let mut prev = 0 - 1
+        let mut going = 1
+        while going == 1 {
+            let (ev, ep) = parse_json_value(src, p, spool, heads, ckeys, cvals, cnexts)
+            if ev == err_val() { return (err_val(), ep) }
+            ckeys.push(0 - 1)
+            cvals.push(ev)
+            cnexts.push(0 - 1)
+            let cell = cvals.len() - 1
+            if prev < 0 {
+                heads[hidx] = cell
+            } else {
+                cnexts[prev] = cell
+            }
+            prev = cell
+            p = skip_json_ws(src, ep)
+            if p >= n {
+                eprint("error: unterminated array")
+                return (err_val(), p)
+            }
+            if src[p] == 44 {
+                p = skip_json_ws(src, p + 1)
+            } else {
+                if src[p] == 93 {
+                    going = 0
+                } else {
+                    eprint("error: expected , or ] in array")
+                    return (err_val(), p)
+                }
+            }
+        }
+        return (arr_base() + hidx, p + 1)
+    }
+    if c == 123 {
+        heads.push(0 - 1)
+        let hidx2 = heads.len() - 1
+        let mut p2 = skip_json_ws(src, p0 + 1)
+        if p2 < n {
+            if src[p2] == 125 {
+                return (obj_base() + hidx2, p2 + 1)
+            }
+        }
+        let mut prev2 = 0 - 1
+        let mut going2 = 1
+        while going2 == 1 {
+            if p2 >= n {
+                eprint("error: unterminated object")
+                return (err_val(), p2)
+            }
+            if src[p2] != 34 {
+                eprint("error: object keys must be strings")
+                return (err_val(), p2)
+            }
+            let (kv, kp) = parse_json_string(src, p2, spool)
+            if kv == err_val() { return (err_val(), kp) }
+            let pc = skip_json_ws(src, kp)
+            if pc >= n {
+                eprint("error: unterminated object")
+                return (err_val(), pc)
+            }
+            if src[pc] != 58 {
+                eprint("error: expected : after object key")
+                return (err_val(), pc)
+            }
+            let (vv, vp) = parse_json_value(src, pc + 1, spool, heads, ckeys, cvals, cnexts)
+            if vv == err_val() { return (err_val(), vp) }
+            ckeys.push(kv)
+            cvals.push(vv)
+            cnexts.push(0 - 1)
+            let cell2 = cvals.len() - 1
+            if prev2 < 0 {
+                heads[hidx2] = cell2
+            } else {
+                cnexts[prev2] = cell2
+            }
+            prev2 = cell2
+            p2 = skip_json_ws(src, vp)
+            if p2 >= n {
+                eprint("error: unterminated object")
+                return (err_val(), p2)
+            }
+            if src[p2] == 44 {
+                p2 = skip_json_ws(src, p2 + 1)
+            } else {
+                if src[p2] == 125 {
+                    going2 = 0
+                } else {
+                    eprint("error: expected , or } in object")
+                    return (err_val(), p2)
+                }
+            }
+        }
+        return (obj_base() + hidx2, p2 + 1)
+    }
+    eprint("error: unexpected byte in JSON")
+    (err_val(), p0)
+}
+
+# Escape a pool string back into JSON literal form (no quotes).
+fn json_escape(s: Str) -> Str {
+    let b = str_builder_new()
+    let n = s.len()
+    let mut i = 0
+    while i < n {
+        let c = s[i]
+        if c == 34 {
+            let o1 = str_builder_append(b, "\\\"")
+        } else if c == 92 {
+            let o2 = str_builder_append(b, "\\\\")
+        } else if c == 10 {
+            let o3 = str_builder_append(b, "\\n")
+        } else if c == 9 {
+            let o4 = str_builder_append(b, "\\t")
+        } else if c == 13 {
+            let o5 = str_builder_append(b, "\\r")
+        } else {
+            let o6 = str_builder_push(b, c)
+        }
+        i += 1
+    }
+    str_builder_finish(b)
+}
+
+fn render_compact(v: Int, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Str {
+    if v == true_val() { return "true" }
+    if v == false_val() { return "false" }
+    if v == null_val() { return "null" }
+    if is_str_val(v) == 1 {
+        let esc = json_escape(spool[v - str_base()])
+        return f"\"{esc}\""
+    }
+    if is_arr_val(v) == 1 {
+        let b = str_builder_new()
+        let o1 = str_builder_append(b, "[")
+        let mut cell = heads[v - arr_base()]
+        let mut first = 1
+        while cell >= 0 {
+            if first == 0 {
+                let oc = str_builder_append(b, ",")
+            }
+            first = 0
+            let o2 = str_builder_append(b, @(cvals[cell], spool, heads, ckeys, cvals, cnexts))
+            cell = cnexts[cell]
+        }
+        let o3 = str_builder_append(b, "]")
+        return str_builder_finish(b)
+    }
+    if is_obj_val(v) == 1 {
+        let b2 = str_builder_new()
+        let o4 = str_builder_append(b2, "{")
+        let mut cell2 = heads[v - obj_base()]
+        let mut first2 = 1
+        while cell2 >= 0 {
+            if first2 == 0 {
+                let oc2 = str_builder_append(b2, ",")
+            }
+            first2 = 0
+            let kesc = json_escape(spool[ckeys[cell2] - str_base()])
+            let o5 = str_builder_append(b2, f"\"{kesc}\":")
+            let o6 = str_builder_append(b2, @(cvals[cell2], spool, heads, ckeys, cvals, cnexts))
+            cell2 = cnexts[cell2]
+        }
+        let o7 = str_builder_append(b2, "}")
+        return str_builder_finish(b2)
+    }
+    f"{v}"
+}
+
+fn indent_of(ind: Int) -> Str {
+    let b = str_builder_new()
+    let mut i = 0
+    while i < ind {
+        let o = str_builder_append(b, "  ")
+        i += 1
+    }
+    str_builder_finish(b)
+}
+
+fn render_pretty(v: Int, ind: Int, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Str {
+    if is_arr_val(v) == 1 {
+        let cell0 = heads[v - arr_base()]
+        if cell0 < 0 { return "[]" }
+        let b = str_builder_new()
+        let o1 = str_builder_append(b, "[\n")
+        let mut cell = cell0
+        while cell >= 0 {
+            let o2 = str_builder_append(b, indent_of(ind + 1))
+            let o3 = str_builder_append(b, @(cvals[cell], ind + 1, spool, heads, ckeys, cvals, cnexts))
+            cell = cnexts[cell]
+            if cell >= 0 {
+                let o4 = str_builder_append(b, ",")
+            }
+            let o5 = str_builder_append(b, "\n")
+        }
+        let o6 = str_builder_append(b, indent_of(ind))
+        let o7 = str_builder_append(b, "]")
+        return str_builder_finish(b)
+    }
+    if is_obj_val(v) == 1 {
+        let cellz = heads[v - obj_base()]
+        if cellz < 0 { return "{}" }
+        let b2 = str_builder_new()
+        let o8 = str_builder_append(b2, "{\n")
+        let mut cell2 = cellz
+        while cell2 >= 0 {
+            let o9 = str_builder_append(b2, indent_of(ind + 1))
+            let kesc2 = json_escape(spool[ckeys[cell2] - str_base()])
+            let oa = str_builder_append(b2, f"\"{kesc2}\": ")
+            let ob = str_builder_append(b2, @(cvals[cell2], ind + 1, spool, heads, ckeys, cvals, cnexts))
+            cell2 = cnexts[cell2]
+            if cell2 >= 0 {
+                let oc = str_builder_append(b2, ",")
+            }
+            let od = str_builder_append(b2, "\n")
+        }
+        let oe = str_builder_append(b2, indent_of(ind))
+        let of = str_builder_append(b2, "}")
+        return str_builder_finish(b2)
+    }
+    render_compact(v, spool, heads, ckeys, cvals, cnexts)
+}
+
+fn render_value(v: Int, compact: Int, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Str {
+    if compact == 1 {
+        return render_compact(v, spool, heads, ckeys, cvals, cnexts)
+    }
+    render_pretty(v, 0, spool, heads, ckeys, cvals, cnexts)
+}
+
+fn count_cells(v: Int, base: Int, heads: List<Int>, cnexts: List<Int>) -> Int {
+    let mut cell = heads[v - base]
+    let mut cnt = 0
+    while cell >= 0 {
+        cnt += 1
+        cell = cnexts[cell]
+    }
+    cnt
+}
+
+# Parse the filter into parallel segment lists. Kinds: 0 = field
+# (payload interns the name), 1 = index (payload is the index),
+# 2 = iterate. Returns the pipe tail (0 none, 1 length, 2 keys) or
+# -1 after a loud error.
+fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, spool: List<Str>) -> Int {
+    let mut path = f
+    let mut tail = 0
+    let bar = str_index_of(f, "|")
+    if bar >= 0 {
+        path = str_slice(f, 0, bar).trim()
+        let tw = str_slice(f, bar + 1, f.len() - bar - 1).trim()
+        if tw == "length" {
+            tail = 1
+        } else if tw == "keys" {
+            tail = 2
+        } else {
+            eprint(f"error: unknown pipe tail: {tw}")
+            return 0 - 1
+        }
+    } else {
+        path = f.trim()
+    }
+    let n = path.len()
+    if n == 0 {
+        eprint("error: empty filter")
+        return 0 - 1
+    }
+    if path[0] != 46 {
+        eprint("error: filter must start with .")
+        return 0 - 1
+    }
+    let mut i = 1
+    while i < n {
+        let c = path[i]
+        if c == 46 {
+            i += 1
+            if i >= n {
+                eprint("error: trailing . in filter")
+                return 0 - 1
+            }
+            if path[i] != 91 {
+                let start = i
+                while i < n {
+                    if is_ident_byte(path[i]) == 0 { break }
+                    i += 1
+                }
+                if i == start {
+                    eprint("error: expected field name after .")
+                    return 0 - 1
+                }
+                seg_kind.push(0)
+                seg_pay.push(intern(str_slice(path, start, i - start), spool))
+            }
+        } else if c == 91 {
+            let close = i + 1
+            let mut cl = close
+            let mut found = 0 - 1
+            while cl < n {
+                if path[cl] == 93 {
+                    found = cl
+                    break
+                }
+                cl += 1
+            }
+            if found < 0 {
+                eprint("error: unterminated [ in filter")
+                return 0 - 1
+            }
+            if found == i + 1 {
+                seg_kind.push(2)
+                seg_pay.push(0)
+            } else {
+                let mut j = i + 1
+                let mut idx = 0
+                let mut digs = 0
+                while j < found {
+                    let d = path[j]
+                    if d < 48 or d > 57 {
+                        eprint("error: only non-negative indexes are supported")
+                        return 0 - 1
+                    }
+                    idx = idx * 10 + (d - 48)
+                    digs += 1
+                    j += 1
+                }
+                if digs == 0 {
+                    eprint("error: empty index")
+                    return 0 - 1
+                }
+                seg_kind.push(1)
+                seg_pay.push(idx)
+            }
+            i = found + 1
+        } else {
+            if i == 1 {
+                let start2 = i
+                while i < n {
+                    if is_ident_byte(path[i]) == 0 { break }
+                    i += 1
+                }
+                if i == start2 {
+                    eprint("error: unexpected byte in filter")
+                    return 0 - 1
+                }
+                seg_kind.push(0)
+                seg_pay.push(intern(str_slice(path, start2, i - start2), spool))
+            } else {
+                eprint("error: unexpected byte in filter")
+                return 0 - 1
+            }
+        }
+    }
+    tail
+}
+
+# Apply the pipe tail and push the rendered result. Returns 0 ok,
+# 3 on a type error.
+fn emit_tail(v: Int, tail: Int, compact: Int, out: List<Str>, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Int {
+    if tail == 1 {
+        if is_str_val(v) == 1 {
+            let slen = spool[v - str_base()].len()
+            out.push(f"{slen}")
+            return 0
+        }
+        if is_arr_val(v) == 1 {
+            let acnt = count_cells(v, arr_base(), heads, cnexts)
+            out.push(f"{acnt}")
+            return 0
+        }
+        if is_obj_val(v) == 1 {
+            let ocnt = count_cells(v, obj_base(), heads, cnexts)
+            out.push(f"{ocnt}")
+            return 0
+        }
+        if v == null_val() {
+            out.push("0")
+            return 0
+        }
+        eprint("error: length needs a string, array, object, or null")
+        return 3
+    }
+    if tail == 2 {
+        if is_obj_val(v) == 0 {
+            eprint("error: keys needs an object")
+            return 3
+        }
+        let names: List<Str> = []
+        let mut cell = heads[v - obj_base()]
+        while cell >= 0 {
+            names.push(spool[ckeys[cell] - str_base()])
+            cell = cnexts[cell]
+        }
+        names.sort()
+        heads.push(0 - 1)
+        let hidx = heads.len() - 1
+        let mut prev = 0 - 1
+        let mut i = 0
+        while i < names.len() {
+            ckeys.push(0 - 1)
+            cvals.push(intern(names[i], spool))
+            cnexts.push(0 - 1)
+            let ncell = cvals.len() - 1
+            if prev < 0 {
+                heads[hidx] = ncell
+            } else {
+                cnexts[prev] = ncell
+            }
+            prev = ncell
+            i += 1
+        }
+        out.push(render_value(arr_base() + hidx, compact, spool, heads, ckeys, cvals, cnexts))
+        return 0
+    }
+    out.push(render_value(v, compact, spool, heads, ckeys, cvals, cnexts))
+    0
+}
+
+# Walk the value through filter segments starting at si, emitting one
+# output per reached leaf. Missing fields and out-of-range indexes
+# continue as null; the wrong container type is a loud error (3).
+fn eval_filter(v: Int, si: Int, seg_kind: List<Int>, seg_pay: List<Int>, tail: Int, compact: Int, out: List<Str>, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Int {
+    if si >= seg_kind.len() {
+        return emit_tail(v, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
+    let kind = seg_kind[si]
+    if kind == 0 {
+        if v == null_val() {
+            return eval_filter(null_val(), si + 1, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+        }
+        if is_obj_val(v) == 0 {
+            eprint("error: cannot index a non-object with a field name")
+            return 3
+        }
+        let want = spool[seg_pay[si] - str_base()]
+        let mut cell = heads[v - obj_base()]
+        let mut found = null_val()
+        while cell >= 0 {
+            if spool[ckeys[cell] - str_base()] == want {
+                found = cvals[cell]
+                cell = 0 - 1
+            } else {
+                cell = cnexts[cell]
+            }
+        }
+        return eval_filter(found, si + 1, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
+    if kind == 1 {
+        if v == null_val() {
+            return eval_filter(null_val(), si + 1, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+        }
+        if is_arr_val(v) == 0 {
+            eprint("error: cannot index a non-array with a number")
+            return 3
+        }
+        let want2 = seg_pay[si]
+        let mut cell2 = heads[v - arr_base()]
+        let mut at = 0
+        let mut found2 = null_val()
+        while cell2 >= 0 {
+            if at == want2 {
+                found2 = cvals[cell2]
+                cell2 = 0 - 1
+            } else {
+                at += 1
+                cell2 = cnexts[cell2]
+            }
+        }
+        return eval_filter(found2, si + 1, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
+    let mut base = arr_base()
+    if is_obj_val(v) == 1 {
+        base = obj_base()
+    } else {
+        if is_arr_val(v) == 0 {
+            eprint("error: cannot iterate a non-container")
+            return 3
+        }
+    }
+    let mut cell3 = heads[v - base]
+    while cell3 >= 0 {
+        let st = eval_filter(cvals[cell3], si + 1, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+        if st != 0 { return st }
+        cell3 = cnexts[cell3]
+    }
+    0
+}
+
+# Parse the document and run the filter; outputs collect into out.
+# Returns 0 ok, 3 on any parse/filter/type error.
+fn run_query(src: Str, filter: Str, compact: Int, out: List<Str>) -> Int {
+    let spool: List<Str> = []
+    let heads: List<Int> = []
+    let ckeys: List<Int> = []
+    let cvals: List<Int> = []
+    let cnexts: List<Int> = []
+    let seg_kind: List<Int> = []
+    let seg_pay: List<Int> = []
+    let tail = parse_filter(filter, seg_kind, seg_pay, spool)
+    if tail < 0 { return 3 }
+    let (v, np) = parse_json_value(src, 0, spool, heads, ckeys, cvals, cnexts)
+    if v == err_val() { return 3 }
+    let rest = skip_json_ws(src, np)
+    if rest < src.len() {
+        eprint("error: trailing bytes after JSON document")
+        return 3
+    }
+    eval_filter(v, 0, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+}
+
+fn check_query(src: Str, filter: Str, compact: Int, want_status: Int, want_lines: Str) -> Int {
+    let out: List<Str> = []
+    let st = run_query(src, filter, compact, out)
+    if st != want_status { return 0 }
+    let b = str_builder_new()
+    let mut i = 0
+    while i < out.len() {
+        if i > 0 {
+            let nl = str_builder_append(b, "\n")
+        }
+        let o = str_builder_append(b, out[i])
+        i += 1
+    }
+    if str_builder_finish(b) != want_lines { return 0 }
+    1
+}
+
+fn self_test() -> Int {
+    # parser + identity (compact)
+    if check_query("{\"a\":1}", ".", 1, 0, "{\"a\":1}") != 1 { return 1 }
+    if check_query(" { \"a\" : [ 1 , -2 , true , false , null ] } ", ".", 1, 0, "{\"a\":[1,-2,true,false,null]}") != 1 { return 2 }
+    if check_query("\"a\\\"b\\nc\"", ".", 1, 0, "\"a\\\"b\\nc\"") != 1 { return 3 }
+    if check_query("[]", ".", 1, 0, "[]") != 1 { return 4 }
+    if check_query("{}", ".", 1, 0, "{}") != 1 { return 5 }
+    if check_query("-42", ".", 1, 0, "-42") != 1 { return 6 }
+    # field chains, indexes, iteration
+    if check_query("{\"a\":{\"b\":[10,20,30]}}", ".a.b[1]", 1, 0, "20") != 1 { return 7 }
+    if check_query("[1,2,3]", ".[]", 1, 0, "1\n2\n3") != 1 { return 8 }
+    if check_query("{\"x\":1,\"y\":2}", ".[]", 1, 0, "1\n2") != 1 { return 9 }
+    if check_query("{\"users\":[{\"name\":\"ann\"},{\"name\":\"bo\"}]}", ".users[].name", 1, 0, "\"ann\"\n\"bo\"") != 1 { return 10 }
+    if check_query("[[1,2],[3,4]]", ".[1][0]", 1, 0, "3") != 1 { return 11 }
+    # missing fields and out-of-range indexes chain as null
+    if check_query("{\"a\":1}", ".missing", 1, 0, "null") != 1 { return 12 }
+    if check_query("{\"a\":1}", ".missing.deeper", 1, 0, "null") != 1 { return 13 }
+    if check_query("[1]", ".[9]", 1, 0, "null") != 1 { return 14 }
+    # pipe tails
+    if check_query("[10,20]", ". | length", 1, 0, "2") != 1 { return 15 }
+    if check_query("\"abc\"", ". | length", 1, 0, "3") != 1 { return 16 }
+    if check_query("{\"a\":1,\"b\":2}", ". | length", 1, 0, "2") != 1 { return 17 }
+    if check_query("null", ". | length", 1, 0, "0") != 1 { return 18 }
+    if check_query("{\"b\":1,\"a\":2}", ". | keys", 1, 0, "[\"a\",\"b\"]") != 1 { return 19 }
+    if check_query("{\"users\":[1,2,3]}", ".users | length", 1, 0, "3") != 1 { return 20 }
+    # pretty rendering
+    if check_query("{\"a\":[1]}", ".", 0, 0, "{\n  \"a\": [\n    1\n  ]\n}") != 1 { return 21 }
+    # loud rejections: parse, number, type, filter, trailing
+    if check_query("{\"a\":", ".", 1, 3, "") != 1 { return 22 }
+    if check_query("1.5", ".", 1, 3, "") != 1 { return 23 }
+    if check_query("1e3", ".", 1, 3, "") != 1 { return 24 }
+    if check_query("\"a\\u0041\"", ".", 1, 3, "") != 1 { return 25 }
+    if check_query("[1] 2", ".", 1, 3, "") != 1 { return 26 }
+    if check_query("[1]", ".a", 1, 3, "") != 1 { return 27 }
+    if check_query("42", ".[]", 1, 3, "") != 1 { return 28 }
+    if check_query("{\"a\":1}", ".a | keys", 1, 3, "") != 1 { return 29 }
+    if check_query("{\"a\":1}", "a", 1, 3, "") != 1 { return 30 }
+    if check_query("{\"a\":1}", ". | nope", 1, 3, "") != 1 { return 31 }
+    42
+}
+
+fn read_stdin_all() -> Str {
+    let b = str_builder_new()
+    let mut going = 1
+    while going == 1 {
+        let line = stdin_read_line()
+        if line == "" {
+            going = 0
+        } else {
+            let o = str_builder_append(b, line)
+        }
+    }
+    str_builder_finish(b)
+}
+
+fn usage() -> Int {
+    print("usage: vaisjq                 (self-test)")
+    print("       vaisjq [-c] <filter> [file|-]")
+    2
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    let mut ai = 0
+    let mut compact = 0
+    if proc_arg(0) == "-c" {
+        compact = 1
+        ai = 1
+    }
+    if proc_argc() < ai + 1 { return usage() }
+    if proc_argc() > ai + 2 { return usage() }
+    let filter = proc_arg(ai)
+    let mut src = ""
+    if proc_argc() == ai + 2 {
+        let path = proc_arg(ai + 1)
+        if path == "-" {
+            src = read_stdin_all()
+        } else {
+            if fs_exists(path) != 1 {
+                eprint(f"error: file not found: {path}")
+                return 3
+            }
+            src = fs_read_text(path)
+        }
+    } else {
+        src = read_stdin_all()
+    }
+    let out: List<Str> = []
+    let st = run_query(src, filter, compact, out)
+    if st != 0 { return st }
+    let mut i = 0
+    while i < out.len() {
+        print(out[i])
+        i += 1
+    }
+    0
+}

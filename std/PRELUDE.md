@@ -132,8 +132,17 @@ is a busybox-style multicall dispatcher — it runs a sibling `dist/bin/<tool>`
 chosen from `proc_self()`'s basename when that names a known applet, or from
 the first argument (`vaisbox <tool> [args...]`, plus `vaisbox list`). It
 refuses to re-exec itself or a missing sibling (exit 3), so argv[0] dispatch
-requires the sibling binary to exist next to it. The roster spans fourteen
-applets — the thirteen text tools plus the vaislisp interpreter.
+requires the sibling binary to exist next to it. The roster spans fifteen
+applets — the thirteen text tools plus the vaislisp interpreter and the
+vaisjq JSON query tool.
+`examples/e396_vaisjq_package` is the fifteenth installable tool: `vaisjq`
+parses integer JSON into tagged-Int values (the vaislisp encoding pattern —
+string pool, shared cell heap for arrays and objects) and runs a jq-subset
+filter: `.` identity, `.name` chains, `[N]` indexes, `[]` iteration, and a
+`| length` / `| keys` pipe tail, printing pretty two-space JSON by default
+and compact JSON with `-c`. Missing fields chain as null; wrong-type access,
+non-integer numbers, `\u` escapes, and trailing garbage are loud exit-3
+errors. Reading is a file argument or stdin (`-` or no argument).
 `examples/e354_vaiswc_package` is the seventh installable tool: `vaiswc`
 counts lines, words, and bytes over one or more sources (`-` for stdin),
 printing `L W B path` per source and a summed `total` row for two or more —
