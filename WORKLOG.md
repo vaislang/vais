@@ -1,5 +1,22 @@
 # Vais Worklog
 
+## 2026-08-12c (vaislisp 표면 4라운드 — cond/and·or/else-옵션 if)
+
+도그푸딩 마찰 3건이 그대로 수요가 된 사이클. **cond**: 절 순회 —
+else는 예약어(무조건 truthy), truthy 절의 본문을 실행하고 잔여 절은
+skip_expr로 건너뜀, 빈 본문 절은 test 값 반환, 무매치 nil. **and/or**:
+가변 인자 값-의미 단락 — 결정 피연산자의 값이 결과((and 1 42)=42,
+(or 0 42)=42), 잔여 식은 평가 없이 스킵((and 0 (print 99))가 99를
+안 찍는 것으로 실증. 빈 (and)=1/(or)=0. **if else 생략**: then 뒤
+토큰이 ")"면 소비 없이 반환, falsy+무else는 nil — 기존 2분기 경로
+바이트 동일.
+
+**코퍼스 리라이트가 회귀 증명**: fizzbuzz(중첩 if 3단→cond 4절),
+vowels(vowel? 중첩 if 5단→or 5항, 카운트 if의 else-0 제거), words
+(플러시 가드 2곳 `(if (= cur "") 0 (set ...))`→`(if (> (str-len cur)
+0) (set ...))`) — 잠긴 출력/exit 전부 불변, 게이트 12케이스 무수정
+통과. self-test 40케이스, 게이트 vaislisp 32케이스.
+
 ## 2026-08-12b (vaislisp 프로그램 도그푸딩 — .lisp 코퍼스 6본)
 
 3라운드 표면을 실전 투입: programs/ 코퍼스 — fizzbuzz(mod를 `(- a (*

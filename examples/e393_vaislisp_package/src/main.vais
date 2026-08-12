@@ -8,17 +8,20 @@
 # band, and nil is one reserved constant. Arithmetic outside the number
 # band reports a loud error and yields 0.
 #
-# Surface: (+ - * / < > =), (if c a b), (define name e), (set name e),
-# (defun name (params...) body), (lambda (params...) body) as a
-# first-class value — applications evaluate the head, so higher-order
-# calls and immediate calls work — (while c body...), (begin e...),
-# (let ((name e) ...) body...) with sequential bindings and shadow
-# restore, (print e), (quote e) / 'e building data without evaluation
-# (symbols intern as strings, spans become cons lists), string
-# literals "..." with str-len / str-cat / str-ref / str-byte, and
-# lists via cons / car / cdr / list / null? / nil. Scoping is dynamic
-# with save/restore parameter frames (lambdas do not capture
-# lexically); `'` is a token break, so atom names cannot contain it.
+# Surface: (+ - * / < > =), (if c a b) with b optional (falsy without
+# an else is nil), (cond (test body...) ... (else body...)), (and
+# e...) / (or e...) short-circuiting with value semantics, (define
+# name e), (set name e), (defun name (params...) body), (lambda
+# (params...) body) as a first-class value — applications evaluate
+# the head, so higher-order calls and immediate calls work — (while c
+# body...), (begin e...), (let ((name e) ...) body...) with
+# sequential bindings and shadow restore, (print e), (quote e) / 'e
+# building data without evaluation (symbols intern as strings, spans
+# become cons lists), string literals "..." with str-len / str-cat /
+# str-ref / str-byte, and lists via cons / car / cdr / list / null? /
+# nil. Scoping is dynamic with save/restore parameter frames (lambdas
+# do not capture lexically); `'` is a token break, so atom names
+# cannot contain it; `else` is reserved inside cond.
 #
 # Modes: no arguments runs the deterministic self-test (the
 # release-corpus entry), `vaislisp <file.lisp>` evaluates a file and
@@ -328,15 +331,19 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         return (v, np + 1)
     }
     if head == "if" {
+        # The else branch is optional: a falsy condition without one
+        # yields nil.
         let (c, cp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
         if c != 0 {
             if c != nil_val() {
                 let (a, ap) = eval_at(toks, cp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                if toks[ap] == ")" { return (a, ap + 1) }
                 let ep = skip_expr(toks, ap)
                 return (a, ep + 1)
             }
         }
         let sp = skip_expr(toks, cp)
+        if toks[sp] == ")" { return (nil_val(), sp + 1) }
         let (b, bp) = eval_at(toks, sp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
         return (b, bp + 1)
     }
@@ -421,6 +428,81 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
             si += 1
         }
         return (lastv, lp2 + 1)
+    }
+    if head == "cond" {
+        # (cond (test body...) ... (else body...)) — clauses evaluate
+        # in order; the first truthy test (or the reserved else) runs
+        # its body and the rest skip. A clause with an empty body
+        # yields its test value; no matching clause yields nil.
+        let mut ccp = pos + 2
+        let mut cres = nil_val()
+        let mut cdone = 0
+        while toks[ccp] != ")" {
+            if cdone == 1 {
+                ccp = skip_expr(toks, ccp)
+            } else {
+                let mut ctruthy = 0
+                let mut cbp = 0
+                if toks[ccp + 1] == "else" {
+                    cbp = ccp + 2
+                    ctruthy = 1
+                } else {
+                    let (ctv, ctnp) = eval_at(toks, ccp + 1, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                    cbp = ctnp
+                    if ctv != 0 {
+                        if ctv != nil_val() {
+                            ctruthy = 1
+                            cres = ctv
+                        }
+                    }
+                }
+                if ctruthy == 1 {
+                    while toks[cbp] != ")" {
+                        let (cbv, cbnp) = eval_at(toks, cbp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                        cres = cbv
+                        cbp = cbnp
+                    }
+                    cdone = 1
+                    ccp = cbp + 1
+                } else {
+                    let mut csp = cbp
+                    while toks[csp] != ")" {
+                        csp = skip_expr(toks, csp)
+                    }
+                    ccp = csp + 1
+                }
+            }
+        }
+        return (cres, ccp + 1)
+    }
+    if head == "and" or head == "or" {
+        # Variadic short-circuit with value semantics: and stops at
+        # the first falsy operand and or at the first truthy one,
+        # returning that operand's value; the remaining expressions
+        # skip unevaluated. Empty (and) is 1, empty (or) is 0.
+        let mut sp2 = pos + 2
+        let mut sres = 1
+        if head == "or" { sres = 0 }
+        let mut sdone = 0
+        while toks[sp2] != ")" {
+            if sdone == 1 {
+                sp2 = skip_expr(toks, sp2)
+            } else {
+                let (ov, onp) = eval_at(toks, sp2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                sres = ov
+                sp2 = onp
+                let mut struthy = 1
+                if ov == 0 { struthy = 0 }
+                if ov == nil_val() { struthy = 0 }
+                if head == "and" {
+                    if struthy == 0 { sdone = 1 }
+                }
+                if head == "or" {
+                    if struthy == 1 { sdone = 1 }
+                }
+            }
+        }
+        return (sres, sp2 + 1)
     }
     if head == "print" {
         let (v, np) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
@@ -716,6 +798,17 @@ fn self_test() -> Int {
     # string indexing: one-byte string vs byte number
     if eval_source("(str-byte \"abc\" 1)") != 98 { return 31 }
     if eval_source("(if (= (str-ref \"vais\" 0) \"v\") 42 0)") != 42 { return 32 }
+    # cond: first truthy clause wins, else catches, no match is nil
+    if eval_source("(cond (0 1) (1 42) (else 7))") != 42 { return 33 }
+    if eval_source("(cond (0 1) (else 42))") != 42 { return 34 }
+    if eval_source("(if (null? (cond (0 1))) 42 0)") != 42 { return 35 }
+    # and/or: value semantics with short-circuit skips
+    if eval_source("(and 1 42)") != 42 { return 36 }
+    if eval_source("(begin (define t 0) (and 0 (set t 1)) (+ t 42))") != 42 { return 37 }
+    if eval_source("(or 0 42)") != 42 { return 38 }
+    if eval_source("(begin (define u 40) (or 1 (set u 0)) (+ u 2))") != 42 { return 39 }
+    # if without else: falsy condition yields nil
+    if eval_source("(if (null? (if 0 7)) 42 0)") != 42 { return 40 }
     42
 }
 

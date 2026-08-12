@@ -1,13 +1,14 @@
-; split a string into words with str-ref accumulation, then reverse
+; split a string into words with str-ref accumulation, then reverse;
+; the flush guards use else-less if over a str-len test
 (defun space? (b) (= b 32))
 (defun split (s)
   (let ((i 0) (n (str-len s)) (cur "") (out nil))
     (while (< i n)
       (if (space? (str-byte s i))
-        (begin (if (= cur "") 0 (set out (cons cur out))) (set cur ""))
+        (begin (if (> (str-len cur) 0) (set out (cons cur out))) (set cur ""))
         (set cur (str-cat cur (str-ref s i))))
       (set i (+ i 1)))
-    (if (= cur "") 0 (set out (cons cur out)))
+    (if (> (str-len cur) 0) (set out (cons cur out)))
     out))
 (defun rev (xs acc) (if (null? xs) acc (rev (cdr xs) (cons (car xs) acc))))
 (defun len (xs) (if (null? xs) 0 (+ 1 (len (cdr xs)))))

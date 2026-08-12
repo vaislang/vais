@@ -4,6 +4,19 @@
 
 ### Added
 
+- vaislisp surface round 4, driven by corpus friction: `(cond (test
+  body...) ... (else body...))` runs the first truthy clause (a
+  clause with an empty body yields its test value, no match yields
+  nil, `else` is reserved), `(and ...)`/`(or ...)` short-circuit with
+  value semantics — the deciding operand is the result and the
+  remaining expressions skip unevaluated — and `if` may omit its else
+  branch (a falsy condition without one yields nil). The corpus
+  programs rewrite onto the new forms with identical locked outputs:
+  fizzbuzz dispatches through cond, vowel? collapses its nested if
+  chain into one or, and the words flush guards drop their else-0
+  padding. Self-test grows to 40 cases and the workflow gate adds
+  three round-4 cases.
+
 - vaislisp program corpus: six real `.lisp` programs under
   `examples/e393_vaislisp_package/programs/` exercise the round-3
   surface end to end in file mode — fizzbuzz (modulo built from

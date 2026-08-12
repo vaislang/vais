@@ -22,7 +22,23 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-12b) — vaislisp 프로그램 도그푸딩: .lisp 코퍼스
+## 현재 작업 (2026-08-12c) — vaislisp 표면 4라운드: cond/and·or/else-옵션 if
+모드: 개별선택 (코퍼스 마찰 실증 기반 — 중첩 if 체인·else-0 패딩 해소)
+- [x] 1. 폼 3종 ✅ 2026-08-12 — cond(첫 truthy 절 실행, 빈 본문 절은
+      test 값, 무매치 nil, else 예약)/and·or(값 의미 단락 — 결정 피연
+      산자가 결과, 잔여 식 스킵)/if else 생략(falsy→nil, 2분기 동작
+      불변).
+- [x] 2. 코퍼스 리라이트 ✅ — fizzbuzz→cond 디스패치, vowels vowel?→
+      or 체인, words 플러시 가드→else-less if(str-len 검사). **잠긴
+      출력 전부 불변으로 게이트 12케이스 그대로 통과 = 회귀 증명.**
+- [x] 3. 잠금 ✅ — self-test 33~40(40케이스), 게이트 +3(cond/단락/
+      else-less nil). 단락 스킵은 (and 0 (print 99)) 미출력 프로브로
+      실증.
+- [x] 4. 문서 + 래더 ✅ — 패키지 헤더/README/CHANGELOG/WORKLOG, fmt/
+      workflow/release 전부 GREEN.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-08-12b) — vaislisp 프로그램 도그푸딩: .lisp 코퍼스
 모드: 개별선택 (3라운드 표면을 실제 프로그램으로 검증)
 - [x] 1. 코퍼스 6본 ✅ 2026-08-12 — programs/: fizzbuzz(나눗셈-mod
       합성)/vowels(str-byte 스캔+let 프레임)/assoc(quote 쌍 데이터

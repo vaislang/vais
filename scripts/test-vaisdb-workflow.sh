@@ -436,6 +436,9 @@ expect_exit "vaislisp let bindings see earlier ones" 0 /bin/sh -c "printf '(let 
 expect_exit "vaislisp quote sugar builds data" 0 /bin/sh -c "printf \"'(1 2 3)\\n\" | '$lisp_dist/bin/vaislisp' repl | grep -qx '= (1 2 3)'"
 expect_exit "vaislisp quoted symbol interns as string" 0 /bin/sh -c "printf \"(str-len 'hello)\\n\" | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 5'"
 expect_exit "vaislisp str-ref and str-byte index strings" 0 /bin/sh -c "printf '(str-cat (str-ref \"vais\" 0) \"ok\")\n(str-byte \"abc\" 2)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 99'"
+expect_exit "vaislisp cond picks first truthy clause" 0 /bin/sh -c "printf '(cond ((= 1 2) 7) ((> 3 1) 42) (else 9))\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
+expect_exit "vaislisp and or short-circuit with values" 0 /bin/sh -c "printf '(begin (define t 40) (and 0 (set t 0)) (or 1 (set t 0)) (+ t 2))\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
+expect_exit "vaislisp if without else is nil" 0 /bin/sh -c "printf '(if 0 7)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= nil'"
 # The programs/ corpus: real .lisp files run in file mode, each locking
 # printed output and a computed exit of 42.
 lisp_progs="$ROOT/examples/e393_vaislisp_package/programs"
