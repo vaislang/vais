@@ -436,6 +436,22 @@ expect_exit "vaislisp let bindings see earlier ones" 0 /bin/sh -c "printf '(let 
 expect_exit "vaislisp quote sugar builds data" 0 /bin/sh -c "printf \"'(1 2 3)\\n\" | '$lisp_dist/bin/vaislisp' repl | grep -qx '= (1 2 3)'"
 expect_exit "vaislisp quoted symbol interns as string" 0 /bin/sh -c "printf \"(str-len 'hello)\\n\" | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 5'"
 expect_exit "vaislisp str-ref and str-byte index strings" 0 /bin/sh -c "printf '(str-cat (str-ref \"vais\" 0) \"ok\")\n(str-byte \"abc\" 2)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 99'"
+# The programs/ corpus: real .lisp files run in file mode, each locking
+# printed output and a computed exit of 42.
+lisp_progs="$ROOT/examples/e393_vaislisp_package/programs"
+printf '1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz\n16\n17\nFizz\n19\nBuzz\n' > "$tmp/want-fizzbuzz.txt"
+expect_exit "vaislisp program fizzbuzz output" 0 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/fizzbuzz.lisp' | cmp -s - '$tmp/want-fizzbuzz.txt'"
+expect_exit "vaislisp program fizzbuzz exit" 42 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/fizzbuzz.lisp' >/dev/null"
+expect_exit "vaislisp program vowels output" 0 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/vowels.lisp' | grep -qx '10'"
+expect_exit "vaislisp program vowels exit" 42 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/vowels.lisp' >/dev/null"
+expect_exit "vaislisp program assoc output" 0 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/assoc.lisp' | grep -qx '(beta 22)'"
+expect_exit "vaislisp program assoc exit" 42 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/assoc.lisp' >/dev/null"
+expect_exit "vaislisp program hof output" 0 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/hof.lisp' | grep -qx '(1 4 9 16)'"
+expect_exit "vaislisp program hof exit" 42 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/hof.lisp' >/dev/null"
+expect_exit "vaislisp program sort output" 0 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/sort.lisp' | grep -qx '(1 2 3 5 8 9)'"
+expect_exit "vaislisp program sort exit" 42 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/sort.lisp' >/dev/null"
+expect_exit "vaislisp program words output" 0 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/words.lisp' | grep -qx '(vais lisp dog food)'"
+expect_exit "vaislisp program words exit" 42 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$lisp_progs/words.lisp' >/dev/null"
 expect_exit "vaislisp repl exits clean at EOF" 0 /bin/sh -c "printf '(str-cat \"a\" \"b\")\n' | '$lisp_dist/bin/vaislisp' repl >/dev/null"
 
 vbox_dist="$tmp/vaisbox-dist"

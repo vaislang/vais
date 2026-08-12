@@ -1,0 +1,11 @@
+; count vowels by scanning bytes with str-byte inside a let frame
+(defun vowel? (b)
+  (if (= b 97) 1 (if (= b 101) 1 (if (= b 105) 1 (if (= b 111) 1 (if (= b 117) 1 0))))))
+(defun count-vowels (s)
+  (let ((i 0) (n (str-len s)) (acc 0))
+    (while (< i n)
+      (if (vowel? (str-byte s i)) (set acc (+ acc 1)) 0)
+      (set i (+ i 1)))
+    acc))
+(print (count-vowels "vaislisp dogfooding session"))
+(+ (count-vowels "aeiou") 37)

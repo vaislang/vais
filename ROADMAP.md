@@ -22,7 +22,20 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-12) — vaislisp 표면 3라운드: let/quote/문자열 첨자
+## 현재 작업 (2026-08-12b) — vaislisp 프로그램 도그푸딩: .lisp 코퍼스
+모드: 개별선택 (3라운드 표면을 실제 프로그램으로 검증)
+- [x] 1. 코퍼스 6본 ✅ 2026-08-12 — programs/: fizzbuzz(나눗셈-mod
+      합성)/vowels(str-byte 스캔+let 프레임)/assoc(quote 쌍 데이터
+      조회+문자열 =)/hof(재귀 map·fold+lambda)/sort(삽입 정렬)/words
+      (str-ref·str-cat 누적 분할+역순). **전부 첫 빌드 정답 — 인터
+      프리터/컴파일러 갭 0건.**
+- [x] 2. 게이트 잠금 ✅ — 워크플로 +12케이스(프로그램별 출력 cmp/grep
+      + 계산된 exit 42).
+- [x] 3. 문서 + 래더 ✅ — 패키지 헤더/README/CHANGELOG/WORKLOG, fmt/
+      workflow/release 전부 GREEN.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-08-12) — vaislisp 표면 3라운드: let/quote/문자열 첨자
 모드: 개별선택 (프로그램형 도그푸딩 3라운드 — 수요 대기 후보 소화)
 - [x] 1. let ✅ 2026-08-12 — (let ((name e) ...) body...) 순차 바인딩
       (앞 바인딩 가시 = let* 의미), apply_fn과 동일한 save/restore

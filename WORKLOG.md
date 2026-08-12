@@ -1,5 +1,19 @@
 # Vais Worklog
 
+## 2026-08-12b (vaislisp 프로그램 도그푸딩 — .lisp 코퍼스 6본)
+
+3라운드 표면을 실전 투입: programs/ 코퍼스 — fizzbuzz(mod를 `(- a (*
+(/ a b) b))`로 합성 — % 없이 충분), vowels(let 프레임에서 str-byte
+바이트 스캔 + set 누적), assoc(quote 쌍 데이터 `'(("alpha" 20) ...)`
+재귀 조회 — 문자열 = 동등이 키 비교), hof(map/fold 재귀 + lambda 값
+인자), sort(insert/isort 이중 재귀), words(str-ref 1바이트 + str-cat
+누적으로 단어 분할, `(= cur "")` 빈 문자열 비교, rev 꼬리 누적).
+
+**결과: 6본 전부 첫 빌드에 정답, 갭 0건** — if 2분기 필수(else 생략
+불가)만 관용으로 준수하면 표면이 실프로그램에 충분함을 실증. 게이트
++12케이스(출력 cmp/grep + exit 42, 파이프 exit는 마지막 명령 것 준수
+— 출력 케이스는 expect 0, exit 케이스는 >/dev/null 리다이렉트).
+
 ## 2026-08-12 (vaislisp 표면 3라운드 — let/quote/문자열 첨자)
 
 **let**: (let ((name e) ...) body...) — 바인딩은 순차 평가(앞 바인딩

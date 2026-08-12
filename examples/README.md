@@ -403,7 +403,8 @@ lambdas with higher-order application), defun save/restore frames, `let`
 bindings with sequential visibility and shadow restore, `quote`/`'` data
 literals (symbols intern as strings, spans become cons lists),
 `str-ref`/`str-byte` string indexing, a `stdin_read_line` REPL with
-definition-preserving token rollback, and file mode,
+definition-preserving token rollback, file mode, and a `programs/` corpus of
+six gate-locked `.lisp` programs (fizzbuzz, vowels, assoc, hof, sort, words),
 `examples/e394_tuple_destructure_in_tuple_body.vais` for tuple destructures
 inside tuple-returning bodies (self-recursive and cross-function),
 `examples/e395_one_line_fn_bodies.vais` for one-line flat fn bodies (tail

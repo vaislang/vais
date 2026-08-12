@@ -23,7 +23,9 @@
 # Modes: no arguments runs the deterministic self-test (the
 # release-corpus entry), `vaislisp <file.lisp>` evaluates a file and
 # exits with the last value, `vaislisp repl` reads stdin lines until
-# EOF and prints each top-level value.
+# EOF and prints each top-level value. The sibling programs/ directory
+# holds a .lisp corpus (fizzbuzz, vowels, assoc, hof, sort, words)
+# run in file mode by the workflow gate.
 
 fn int_band() -> Int { 1000000000000000 }
 

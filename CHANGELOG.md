@@ -4,6 +4,18 @@
 
 ### Added
 
+- vaislisp program corpus: six real `.lisp` programs under
+  `examples/e393_vaislisp_package/programs/` exercise the round-3
+  surface end to end in file mode — fizzbuzz (modulo built from
+  integer division), vowels (`str-byte` scanning inside a `let`
+  frame), assoc (lookup over quoted pair data with string equality),
+  hof (recursive map/fold with lambda values), sort (insertion sort
+  over a quoted list), and words (splitting a string into a word list
+  by `str-ref`/`str-cat` accumulation, then reversing it). The
+  workflow gate runs all six, locking both the printed output and a
+  computed exit of 42 per program; every program ran correctly on the
+  first build, with no interpreter or compiler gaps surfaced.
+
 - vaislisp surface round 3: `(let ((name expr) ...) body...)` local
   bindings that evaluate sequentially (earlier bindings visible),
   shadow through the same save/restore frame discipline as function

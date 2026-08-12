@@ -1,0 +1,10 @@
+; insertion sort over a quoted list, summed with a fold
+(defun insert (x xs)
+  (if (null? xs) (cons x nil)
+    (if (< x (car xs)) (cons x xs)
+      (cons (car xs) (insert x (cdr xs))))))
+(defun isort (xs) (if (null? xs) nil (insert (car xs) (isort (cdr xs)))))
+(defun fold (f acc xs) (if (null? xs) acc (fold f (f acc (car xs)) (cdr xs))))
+(define sorted (isort '(5 3 8 1 9 2)))
+(print sorted)
+(+ (fold (lambda (a b) (+ a b)) 0 sorted) 14)
