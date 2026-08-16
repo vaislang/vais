@@ -485,6 +485,11 @@ expect_exit "vaisjq has checks keys" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' '.users
 expect_exit "vaisjq first and last are index sugar" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' -c '.users | last | .name' '$tmp/vaisjq-t.json' | grep -qx '\"bo\"'"
 expect_exit "vaisjq select and or with precedence" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' '.users[] | select(.age > 29 and .name == \"ann\" or .age < 26) | .age' '$tmp/vaisjq-t.json' | tr '\n' ' ' | grep -q '30 25 '"
 expect_exit "vaisjq map on non-array rejects loud" 3 /bin/sh -c "printf '{\"a\":1}' | '$jq_dist/bin/vaisjq' '. | map(.a)' >/dev/null 2>&1"
+expect_exit "vaisjq map add pipeline sums" 0 /bin/sh -c "printf '{\"xs\":[{\"n\":20},{\"n\":22}]}' | '$jq_dist/bin/vaisjq' '.xs | map(.n) | add' | grep -qx '42'"
+expect_exit "vaisjq map join renders csv" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' '.users | map(.name) | join(\", \")' '$tmp/vaisjq-t.json' | grep -qx '\"ann, bo\"'"
+expect_exit "vaisjq min max reduce" 0 /bin/sh -c "printf '[5,2,9]' | '$jq_dist/bin/vaisjq' '. | max' | grep -qx '9'"
+expect_exit "vaisjq select has atom filters" 0 /bin/sh -c "printf '[{\"a\":9},{\"b\":2},{\"a\":1}]' | '$jq_dist/bin/vaisjq' '.[] | select(has(\"a\") and .a > 5) | .a' | grep -qx '9'"
+expect_exit "vaisjq add mixed rejects loud" 3 /bin/sh -c "printf '[1,\"a\"]' | '$jq_dist/bin/vaisjq' '. | add' >/dev/null 2>&1"
 
 vbox_dist="$tmp/vaisbox-dist"
 vbox_bin="$tmp/vaisbox-bin"

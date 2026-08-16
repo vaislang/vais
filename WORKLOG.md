@@ -1,5 +1,25 @@
 # Vais Worklog
 
+## 2026-08-13c (vaisjq 3라운드 — add/join/min·max + select has 원자)
+
+집계 4종을 스테이지 kind 6~9로: **add**(전 원소 수→합계+**±1e15 밴드
+오버플로 가드**, 전 원소 문자열→연결, 빈→null, 혼합 LOUD),
+**join("sep")**(문자열 verbatim/숫자 문자열화/null 빈 문자열/기타
+LOUD — jq 1.6 관용), **min/max**(수 전용, 빈→null). 셀 힙 재사용,
+eval_filter 16-param 불변. `.xs | map(.n) | add` = 42,
+`.users | map(.name) | join(", ")` = "ann, bo" 합성 확인.
+
+**select has 원자 + 팩킹 버그 root-fix**: has("k"|N)를
+parse_select_atom이 인식(파이프 값 검사, pend 경로 identity) —
+구현 직후 케이스 74가 전량 드롭으로 실패. 원인: **OR-그룹 플래그
++128이 has의 op 필드와 정면 충돌**(op 8 → 8*16=128 — 마스킹이
+has 원자를 op 0 문자열 비교로 오독). 플래그를 +256으로 이동(원자
+meta 최대 130). 교훈: **비트 팩킹 시 필드 상한을 먼저 표로** —
+op*16+litk의 최대값(8*16+1=129)이 플래그 비트를 이미 점유하고
+있었다.
+
+self-test 75케이스, 게이트 vaisjq 27케이스. 컴파일러 무변경.
+
 ## 2026-08-13b (vaisjq 확장 2 — map/has/first·last/다중 조건)
 
 **파라미터 예산 설계가 핵심**: eval_filter가 이미 16-param 상한이라

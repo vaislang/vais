@@ -22,7 +22,23 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-13b) — vaisjq 확장 2: map/has/first·last/다중 조건
+## 현재 작업 (2026-08-13c) — vaisjq 3라운드: add/join/min·max + has 원자
+모드: 개별선택 (집계 스테이지 + select 멤버십 합성)
+- [x] 1. add/join/min·max ✅ 2026-08-13 — 스테이지 kind 6~9: add(수
+      합계 — 밴드 오버플로 가드/문자열 연결/빈→null/혼합 LOUD),
+      join("sep")(str verbatim·num 문자열화·null 빈·기타 LOUD),
+      min·max(수 전용, 빈→null). eval_filter 16-param 불변.
+- [x] 2. select has 원자 ✅ — has("k"|N)이 파이프 값 검사 원자로
+      and/or 체인과 합성. **경유 버그 root-fix**: OR-그룹 플래그
+      +128이 has의 op 필드(8*16=128)와 충돌 — select(has(...))가
+      전량 드롭. 플래그를 +256으로 이동(op 최대 130 < 256).
+- [x] 3. 잠금 ✅ — self-test 61~75(75케이스), 게이트 +5(map|add
+      합계/map|join CSV/min·max/has 원자/혼합 add LOUD).
+- [x] 4. 문서 + 래더 ✅ — PRELUDE/README/CHANGELOG/WORKLOG, fmt/
+      workflow/test.sh 417/parity 417/release 전부 GREEN.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-08-13b) — vaisjq 확장 2: map/has/first·last/다중 조건
 모드: 개별선택 (등록 후보 소화 — jq 실용 2라운드)
 - [x] 1. map/has/first·last ✅ 2026-08-13 — map(경로)=원소별 단일값
       워크로 새 배열 실체화(결측→null, 비배열 LOUD, atom op 7 재사용),

@@ -4,6 +4,20 @@
 
 ### Added
 
+- vaisjq round 3, aggregation and membership: `add` sums number
+  arrays (guarded against leaving the integer band) or concatenates
+  string arrays, with empty arrays yielding null and mixed element
+  types loud; `join("sep")` renders arrays to a single string —
+  strings verbatim, numbers stringified, null empty, anything else
+  loud; `min`/`max` reduce number arrays (empty is null); and
+  `has("key")`/`has(N)` now also works as a select atom testing the
+  piped value, composing with and/or chains
+  (`select(has("a") and .a > 5)`). Fixed in the same change: the
+  select OR-group flag moved from +128 to +256 on the atom meta —
+  the has atom's op field itself packs to 128, so the old flag bit
+  collided and a `select(has(...))` dropped every value. Self-test
+  grows to 75 cases and the workflow gate adds five round-3 cases.
+
 - vaisjq expansion two: `map(<path>)` materializes a fresh array
   from each element's single-valued walk (missing fields map to
   null, non-arrays are loud), `has("key")`/`has(N)` emits true/false

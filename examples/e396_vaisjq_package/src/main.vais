@@ -21,13 +21,17 @@
 # integer/string/true/false/null literals or bare truthiness
 # (false/null drop), `and` binds tighter than `or`, short-circuit
 # left to right; select paths cannot iterate and string literals are
-# verbatim — `map(<path>)` building a new array from each element's
+# verbatim (a `has("key")`/`has(N)` atom tests the piped value) —
+# `map(<path>)` building a new array from each element's
 # single-valued walk, `has("key")` / `has(N)` emitting true/false,
-# `first`/`last` as sugar for indexes 0 / -1, and a terminal
-# `| length` or `| keys` stage (keys sorts). Missing fields and
-# out-of-range indexes emit null and keep chaining (null indexes to
-# null, jq-style); indexing or iterating a value of the wrong type
-# is a loud error with exit 3.
+# `first`/`last` as sugar for indexes 0 / -1, `add` (number sums or
+# string concatenation; empty is null, mixed is loud, sums stay
+# inside the integer band), `join("sep")` (strings verbatim, numbers
+# stringified, null empty), `min`/`max` (numbers only, empty is
+# null), and a terminal `| length` or `| keys` stage (keys sorts).
+# Missing fields and out-of-range indexes emit null and keep
+# chaining (null indexes to null, jq-style); indexing or iterating a
+# value of the wrong type is a loud error with exit 3.
 #
 # Modes: no arguments runs the deterministic self-test (the
 # release-corpus entry), `vaisjq [-c] <filter> [file]` queries a file
@@ -627,6 +631,51 @@ fn parse_path_into(path: Str, seg_kind: List<Int>, seg_pay: List<Int>, spool: Li
 # the atom as starting a new OR group (packed as +128 on the meta).
 # Returns 0 ok, -1 after a loud error.
 fn parse_select_atom(inner: Str, sel_meta: List<Int>, sel_lit: List<Int>, pend_paths: List<Str>, spool: List<Str>, gflag: Int) -> Int {
+    # `has("key")` / `has(N)` as an atom tests the piped value itself
+    # (op 8 — metas 128/129; the group flag sits at +256 to stay clear
+# of the op field; the pend path stays identity).
+    if inner.len() >= 6 and str_slice(inner, 0, 4) == "has(" {
+        if inner[inner.len() - 1] != 41 {
+            eprint("error: has is missing its closing parenthesis")
+            return 0 - 1
+        }
+        let harg = str_slice(inner, 4, inner.len() - 5).trim()
+        let mut hlitk = 0
+        let mut hlit = 0
+        if harg.len() >= 2 and harg[0] == 34 {
+            if harg[harg.len() - 1] != 34 {
+                eprint("error: unterminated string literal in has")
+                return 0 - 1
+            }
+            hlitk = 1
+            hlit = intern(str_slice(harg, 1, harg.len() - 2), spool)
+        } else {
+            let mut hj = 0
+            let mut hdigs = 0
+            let mut hacc = 0
+            while hj < harg.len() {
+                let hd = harg[hj]
+                if hd < 48 or hd > 57 {
+                    eprint("error: has needs a string key or a non-negative index")
+                    return 0 - 1
+                }
+                hacc = hacc * 10 + (hd - 48)
+                hdigs += 1
+                hj += 1
+            }
+            if hdigs == 0 {
+                eprint("error: has needs a string key or a non-negative index")
+                return 0 - 1
+            }
+            hlit = hacc
+        }
+        let mut hmeta = 8 * 16 + hlitk
+        if gflag == 1 { hmeta = hmeta + 256 }
+        sel_meta.push(hmeta)
+        sel_lit.push(hlit)
+        pend_paths.push(".")
+        return 0
+    }
     let mut op = 6
     let mut opat = 0 - 1
     let mut oplen = 0
@@ -711,7 +760,7 @@ fn parse_select_atom(inner: Str, sel_meta: List<Int>, sel_lit: List<Int>, pend_p
         }
     }
     let mut meta = op * 16 + litk
-    if gflag == 1 { meta = meta + 128 }
+    if gflag == 1 { meta = meta + 256 }
     sel_meta.push(meta)
     sel_lit.push(litv)
     pend_paths.push(lhs)
@@ -731,7 +780,8 @@ fn parse_select_atom(inner: Str, sel_meta: List<Int>, sel_lit: List<Int>, pend_p
 # `first`/`last` are sugar for index segments 0 / -1. A final
 # `length`/`keys` stage becomes the emission tail. Atom ops: 0 ==,
 # 1 !=, 2 <, 3 >, 4 <=, 5 >=, 6 bare truthiness (false/null drop);
-# +128 marks an atom starting a new OR group. Literal kinds:
+# +256 marks an atom starting a new OR group (op 8 itself packs to
+# 128+litk, so the flag lives above the op field). Literal kinds:
 # 0 integer, 1 verbatim string (no escapes), 2 true, 3 false,
 # 4 null. Pushes the main-walk segment count into meta_out; returns
 # the tail (0 none, 1 length, 2 keys) or -1 after a loud error.
@@ -887,6 +937,27 @@ fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<
             } else if part == "last" {
                 seg_kind.push(1)
                 seg_pay.push(0 - 1)
+            } else if part == "add" {
+                seg_kind.push(6)
+                seg_pay.push(0)
+            } else if part == "min" {
+                seg_kind.push(8)
+                seg_pay.push(0)
+            } else if part == "max" {
+                seg_kind.push(9)
+                seg_pay.push(0)
+            } else if part.len() >= 8 and str_slice(part, 0, 5) == "join(" {
+                if part[part.len() - 1] != 41 {
+                    eprint("error: join is missing its closing parenthesis")
+                    return 0 - 1
+                }
+                let jinner = str_slice(part, 5, part.len() - 6).trim()
+                if jinner.len() < 2 or jinner[0] != 34 or jinner[jinner.len() - 1] != 34 {
+                    eprint("error: join needs a string separator")
+                    return 0 - 1
+                }
+                seg_kind.push(7)
+                seg_pay.push(intern(str_slice(jinner, 1, jinner.len() - 2), spool))
             } else {
                 if parse_path_into(part, seg_kind, seg_pay, spool, 1) != 0 { return 0 - 1 }
             }
@@ -986,17 +1057,49 @@ fn select_groups_pass(v: Int, astart: Int, acount: Int, seg_kind: List<Int>, seg
                     scanning = 0
                 } else {
                     let meta = sel_meta[aj]
-                    if aj > ai and meta >= 128 {
+                    if aj > ai and meta >= 256 {
                         scanning = 0
                     } else {
                         if group_ok == 1 {
-                            let pv = walk_path(v, sel_span[aj * 2], sel_span[aj * 2 + 1], seg_kind, seg_pay, spool, heads, ckeys, cvals, cnexts)
-                            if pv == err_val() { return 3 }
                             let mut m2 = meta
-                            if m2 >= 128 { m2 = m2 - 128 }
-                            let r = select_passes(pv, m2, sel_lit[aj], spool)
-                            if r == 3 { return 3 }
-                            if r == 0 { group_ok = 0 }
+                            if m2 >= 256 { m2 = m2 - 256 }
+                            let aop = m2 / 16
+                            if aop == 8 {
+                                # has atom: test the piped value directly.
+                                let hlitk2 = m2 - aop * 16
+                                let mut hfound = 0
+                                if hlitk2 == 1 {
+                                    if is_obj_val(v) == 0 {
+                                        eprint("error: has with a string key needs an object")
+                                        return 3
+                                    }
+                                    let hwant = spool[sel_lit[aj] - str_base()]
+                                    let mut hcell = heads[v - obj_base()]
+                                    while hcell >= 0 {
+                                        if spool[ckeys[hcell] - str_base()] == hwant {
+                                            hfound = 1
+                                            hcell = 0 - 1
+                                        } else {
+                                            hcell = cnexts[hcell]
+                                        }
+                                    }
+                                } else {
+                                    if is_arr_val(v) == 0 {
+                                        eprint("error: has with an index needs an array")
+                                        return 3
+                                    }
+                                    if sel_lit[aj] < count_cells(v, arr_base(), heads, cnexts) {
+                                        hfound = 1
+                                    }
+                                }
+                                if hfound == 0 { group_ok = 0 }
+                            } else {
+                                let pv = walk_path(v, sel_span[aj * 2], sel_span[aj * 2 + 1], seg_kind, seg_pay, spool, heads, ckeys, cvals, cnexts)
+                                if pv == err_val() { return 3 }
+                                let r = select_passes(pv, m2, sel_lit[aj], spool)
+                                if r == 3 { return 3 }
+                                if r == 0 { group_ok = 0 }
+                            }
                         }
                         aj += 1
                     }
@@ -1249,6 +1352,98 @@ fn eval_filter(v: Int, si: Int, n_main: Int, seg_kind: List<Int>, seg_pay: List<
         }
         return eval_filter(ans, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
     }
+    if kind == 6 or kind == 8 or kind == 9 {
+        # add sums numbers or concatenates strings; min/max reduce
+        # number arrays. Empty arrays yield null, mixed or unsupported
+        # element types are loud.
+        if is_arr_val(v) == 0 {
+            eprint("error: add, min, and max need an array")
+            return 3
+        }
+        let mut cnt = 0
+        let mut nums = 1
+        let mut strs = 1
+        let mut acc = 0
+        let mut best = 0
+        let mut cella = heads[v - arr_base()]
+        let sb = str_builder_new()
+        while cella >= 0 {
+            let ev = cvals[cella]
+            if is_num_val(ev) == 1 {
+                strs = 0
+                if cnt == 0 { best = ev }
+                acc = acc + ev
+                if kind == 8 {
+                    if ev < best { best = ev }
+                }
+                if kind == 9 {
+                    if ev > best { best = ev }
+                }
+            } else if is_str_val(ev) == 1 {
+                nums = 0
+                let piece = spool[ev - str_base()]
+                let oadd = str_builder_append(sb, piece)
+            } else {
+                nums = 0
+                strs = 0
+            }
+            cnt += 1
+            cella = cnexts[cella]
+        }
+        if cnt == 0 {
+            return eval_filter(null_val(), si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+        }
+        if kind == 6 {
+            if nums == 1 {
+                if acc >= num_band() or acc <= 0 - num_band() {
+                    eprint("error: add overflows the integer band")
+                    return 3
+                }
+                return eval_filter(acc, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+            }
+            if strs == 1 {
+                return eval_filter(intern(str_builder_finish(sb), spool), si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+            }
+            eprint("error: add needs all numbers or all strings")
+            return 3
+        }
+        if nums == 0 {
+            eprint("error: min and max need numbers")
+            return 3
+        }
+        return eval_filter(best, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
+    if kind == 7 {
+        # join("sep"): strings verbatim, numbers stringified, null
+        # empty; anything else is loud.
+        if is_arr_val(v) == 0 {
+            eprint("error: join needs an array")
+            return 3
+        }
+        let sep = spool[seg_pay[si] - str_base()]
+        let jb = str_builder_new()
+        let mut firstj = 1
+        let mut cellj = heads[v - arr_base()]
+        while cellj >= 0 {
+            if firstj == 0 {
+                let osep = str_builder_append(jb, sep)
+            }
+            firstj = 0
+            let jv = cvals[cellj]
+            if is_str_val(jv) == 1 {
+                let ostr = str_builder_append(jb, spool[jv - str_base()])
+            } else if is_num_val(jv) == 1 {
+                let onum = str_builder_append(jb, f"{jv}")
+            } else {
+                if jv != null_val() {
+                    eprint("error: join elements must be strings, numbers, or null")
+                    return 3
+                }
+            }
+            cellj = cnexts[cellj]
+        }
+        return eval_filter(intern(str_builder_finish(jb), spool), si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
     let mut base = arr_base()
     if is_obj_val(v) == 1 {
         base = obj_base()
@@ -1386,6 +1581,25 @@ fn self_test() -> Int {
     if check_query("[{\"n\":5,\"ok\":true},{\"n\":9,\"ok\":false},{\"n\":9,\"ok\":true}]", ".[] | select(.n > 6 and .ok) | .n", 1, 0, "9") != 1 { return 58 }
     if check_query("[{\"n\":1},{\"n\":5},{\"n\":9}]", ".[] | select(.n == 1 or .n == 9) | .n", 1, 0, "1\n9") != 1 { return 59 }
     if check_query("[{\"n\":2,\"t\":\"a\"},{\"n\":9,\"t\":\"b\"},{\"n\":9,\"t\":\"a\"}]", ".[] | select(.n > 8 and .t == \"a\" or .n < 3) | .n", 1, 0, "2\n9") != 1 { return 60 }
+    # add: number sums, string concatenation, empty null, mixed loud
+    if check_query("[1,2,3]", ". | add", 1, 0, "6") != 1 { return 61 }
+    if check_query("[\"a\",\"b\",\"c\"]", ". | add", 1, 0, "\"abc\"") != 1 { return 62 }
+    if check_query("[]", ". | add", 1, 0, "null") != 1 { return 63 }
+    if check_query("[1,\"a\"]", ". | add", 1, 3, "") != 1 { return 64 }
+    if check_query("{\"xs\":[{\"n\":20},{\"n\":22}]}", ".xs | map(.n) | add", 1, 0, "42") != 1 { return 65 }
+    # join: strings, stringified numbers, null empties, loud otherwise
+    if check_query("[\"a\",\"b\",\"c\"]", ". | join(\", \")", 1, 0, "\"a, b, c\"") != 1 { return 66 }
+    if check_query("[1,null,\"x\"]", ". | join(\"-\")", 1, 0, "\"1--x\"") != 1 { return 67 }
+    if check_query("[]", ". | join(\",\")", 1, 0, "\"\"") != 1 { return 68 }
+    if check_query("[[1]]", ". | join(\",\")", 1, 3, "") != 1 { return 69 }
+    # min/max: numbers only, empty null
+    if check_query("[5,2,9]", ". | min", 1, 0, "2") != 1 { return 70 }
+    if check_query("[5,2,9]", ". | max", 1, 0, "9") != 1 { return 71 }
+    if check_query("[]", ". | min", 1, 0, "null") != 1 { return 72 }
+    if check_query("[\"a\"]", ". | max", 1, 3, "") != 1 { return 73 }
+    # has nested in select, alone and chained
+    if check_query("[{\"a\":1},{\"b\":2},{\"a\":3}]", ".[] | select(has(\"a\")) | . | length", 1, 0, "1\n1") != 1 { return 74 }
+    if check_query("[{\"a\":9},{\"b\":2},{\"a\":1}]", ".[] | select(has(\"a\") and .a > 5) | .a", 1, 0, "9") != 1 { return 75 }
     42
 }
 
