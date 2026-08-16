@@ -140,14 +140,18 @@ parses integer JSON into tagged-Int values (the vaislisp encoding pattern —
 string pool, shared cell heap for arrays and objects) and runs a jq-subset
 filter: `.` identity, `.name` chains, `[N]`/`[-N]` indexes (negatives count
 from the end), `[]` iteration, multi-stage pipes (pure path stages
-concatenate), `select(<path> [op <literal>])` stages — `==`/`!=` against
-integer, verbatim-string, `true`, `false`, or `null` literals, ordered
-`<`/`>`/`<=`/`>=` against integers, or bare truthiness where `false`/`null`
-drop — and a terminal `| length` / `| keys` stage, printing pretty
-two-space JSON by default and compact JSON with `-c`. Missing fields chain
-as null; wrong-type access, non-integer numbers, `\u` escapes, iterating
-inside a select path, and trailing garbage are loud exit-3 errors. Reading
-is a file argument or stdin (`-` or no argument).
+concatenate), `select(<cond> [and|or <cond>]...)` stages — each condition
+is `<path> [op <literal>]` with `==`/`!=` against integer, verbatim-string,
+`true`, `false`, or `null` literals, ordered `<`/`>`/`<=`/`>=` against
+integers, or bare truthiness where `false`/`null` drop, with `and` binding
+tighter than `or` and left-to-right short-circuit — `map(<path>)` building
+a new array from each element's single-valued walk, `has("key")`/`has(N)`
+emitting true/false, `first`/`last` as index sugar, and a terminal
+`| length` / `| keys` stage, printing pretty two-space JSON by default and
+compact JSON with `-c`. Missing fields chain as null; wrong-type access,
+non-integer numbers, `\u` escapes, iterating inside a select or map path,
+and trailing garbage are loud exit-3 errors. Reading is a file argument or
+stdin (`-` or no argument).
 `examples/e354_vaiswc_package` is the seventh installable tool: `vaiswc`
 counts lines, words, and bytes over one or more sources (`-` for stdin),
 printing `L W B path` per source and a summed `total` row for two or more —

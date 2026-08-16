@@ -22,7 +22,24 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-13) — vaisjq 필터 확장: 파이프/select/음수 인덱스
+## 현재 작업 (2026-08-13b) — vaisjq 확장 2: map/has/first·last/다중 조건
+모드: 개별선택 (등록 후보 소화 — jq 실용 2라운드)
+- [x] 1. map/has/first·last ✅ 2026-08-13 — map(경로)=원소별 단일값
+      워크로 새 배열 실체화(결측→null, 비배열 LOUD, atom op 7 재사용),
+      has("key")/has(N)=true·false 방출(atom op 8, 잘못된 타입 LOUD),
+      first/last=인덱스 0/-1 슈가(파스 단계 컴파일, 평가기 무변경).
+- [x] 2. select 다중 조건 ✅ — ` and `/` or ` 톱레벨 분할(따옴표 인지),
+      **and이 or보다 강결합**(sum-of-products), 좌→우 단락. atom들은
+      기존 op/lit 테이블 재사용 + meta 128비트 OR-그룹 플래그,
+      seg_pay=astart*4096+acount 팩킹 — **신규 리스트 0, eval_filter
+      16-param 불변**.
+- [x] 3. 잠금 ✅ — 첫 빌드 정답(갭 0). self-test 46~60(60케이스),
+      게이트 +5(map/has/first·last/우선순위/비배열 LOUD).
+- [x] 4. 문서 + 래더 ✅ — PRELUDE/README/CHANGELOG/WORKLOG, fmt/
+      workflow/test.sh 417/parity 417/release 전부 GREEN.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-08-13) — vaisjq 필터 확장: 파이프/select/음수 인덱스
 모드: 개별선택 (등록 후보 소화 — jq 실용 3종)
 - [x] 1. 다단 파이프 ✅ 2026-08-13 — 톱레벨 `|` 분할(따옴표 인지),
       순수 경로 스테이지는 세그먼트 결합(`.a | .b` ≡ `.a.b`),

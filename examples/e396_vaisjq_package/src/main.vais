@@ -16,13 +16,18 @@
 # Filters: `.` identity, `.name` field chains, `[N]`/`[-N]` array
 # indexes (negatives count from the end), `[]` iteration (arrays emit
 # elements, objects emit values), multi-stage pipes (pure path stages
-# concatenate), `select(<path> [op <literal>])` stages with == != <
-# > <= >= against integer/string/true/false/null literals or bare
-# truthiness (false/null drop; select paths cannot iterate; string
-# literals are verbatim), and a terminal `| length` or `| keys`
-# stage (keys sorts). Missing fields and out-of-range indexes emit
-# null and keep chaining (null indexes to null, jq-style); indexing
-# or iterating a value of the wrong type is a loud error with exit 3.
+# concatenate), `select(<cond> [and|or <cond>]...)` stages — each
+# condition is `<path> [op <literal>]` with == != < > <= >= against
+# integer/string/true/false/null literals or bare truthiness
+# (false/null drop), `and` binds tighter than `or`, short-circuit
+# left to right; select paths cannot iterate and string literals are
+# verbatim — `map(<path>)` building a new array from each element's
+# single-valued walk, `has("key")` / `has(N)` emitting true/false,
+# `first`/`last` as sugar for indexes 0 / -1, and a terminal
+# `| length` or `| keys` stage (keys sorts). Missing fields and
+# out-of-range indexes emit null and keep chaining (null indexes to
+# null, jq-style); indexing or iterating a value of the wrong type
+# is a loud error with exit 3.
 #
 # Modes: no arguments runs the deterministic self-test (the
 # release-corpus entry), `vaisjq [-c] <filter> [file]` queries a file
@@ -617,18 +622,119 @@ fn parse_path_into(path: Str, seg_kind: List<Int>, seg_pay: List<Int>, spool: Li
     0
 }
 
+# Parse one select condition atom (`<path>` bare or
+# `<path> op <literal>`) into the shared atom tables. gflag 1 marks
+# the atom as starting a new OR group (packed as +128 on the meta).
+# Returns 0 ok, -1 after a loud error.
+fn parse_select_atom(inner: Str, sel_meta: List<Int>, sel_lit: List<Int>, pend_paths: List<Str>, spool: List<Str>, gflag: Int) -> Int {
+    let mut op = 6
+    let mut opat = 0 - 1
+    let mut oplen = 0
+    let mut k = 0
+    let mut kinq = 0
+    while k < inner.len() {
+        let b = inner[k]
+        if b == 34 {
+            if kinq == 1 { kinq = 0 } else { kinq = 1 }
+        }
+        if kinq == 0 and opat < 0 {
+            if b == 61 and k + 1 < inner.len() {
+                if inner[k + 1] == 61 { op = 0; opat = k; oplen = 2 }
+            }
+            if b == 33 and k + 1 < inner.len() {
+                if inner[k + 1] == 61 { op = 1; opat = k; oplen = 2 }
+            }
+            if b == 60 {
+                if k + 1 < inner.len() and inner[k + 1] == 61 { op = 4; opat = k; oplen = 2 }
+                else { op = 2; opat = k; oplen = 1 }
+            }
+            if b == 62 {
+                if k + 1 < inner.len() and inner[k + 1] == 61 { op = 5; opat = k; oplen = 2 }
+                else { op = 3; opat = k; oplen = 1 }
+            }
+        }
+        k += 1
+    }
+    let mut lhs = inner
+    let mut litk = 0
+    let mut litv = 0
+    if opat >= 0 {
+        lhs = str_slice(inner, 0, opat).trim()
+        let rhs = str_slice(inner, opat + oplen, inner.len() - opat - oplen).trim()
+        if rhs.len() == 0 {
+            eprint("error: select comparison needs a literal")
+            return 0 - 1
+        }
+        if rhs == "true" {
+            litk = 2
+        } else if rhs == "false" {
+            litk = 3
+        } else if rhs == "null" {
+            litk = 4
+        } else if rhs[0] == 34 {
+            if rhs.len() < 2 or rhs[rhs.len() - 1] != 34 {
+                eprint("error: unterminated string literal in select")
+                return 0 - 1
+            }
+            litk = 1
+            litv = intern(str_slice(rhs, 1, rhs.len() - 2), spool)
+        } else {
+            let mut rj = 0
+            let mut rneg = 0
+            if rhs[0] == 45 {
+                rneg = 1
+                rj = 1
+            }
+            let mut racc = 0
+            let mut rdigs = 0
+            while rj < rhs.len() {
+                let rd = rhs[rj]
+                if rd < 48 or rd > 57 {
+                    eprint("error: select literals are integers, strings, true, false, or null")
+                    return 0 - 1
+                }
+                racc = racc * 10 + (rd - 48)
+                rdigs += 1
+                rj += 1
+            }
+            if rdigs == 0 {
+                eprint("error: select literals are integers, strings, true, false, or null")
+                return 0 - 1
+            }
+            litk = 0
+            if rneg == 1 { racc = 0 - racc }
+            litv = racc
+        }
+        if op >= 2 and litk != 0 {
+            eprint("error: ordered select comparisons need integer literals")
+            return 0 - 1
+        }
+    }
+    let mut meta = op * 16 + litk
+    if gflag == 1 { meta = meta + 128 }
+    sel_meta.push(meta)
+    sel_lit.push(litv)
+    pend_paths.push(lhs)
+    0
+}
+
 # Split the filter on top-level pipes and parse each stage. Pure path
 # stages concatenate (`.users[] | .name` walks like `.users[].name`),
-# `select(<path> [op <literal>])` becomes a kind-3 segment whose
-# tables carry the packed op/literal-kind meta, the literal payload,
-# and the inner path span (appended to the shared segment lists after
-# the main walk so the [0, n_main) prefix stays contiguous), and a
-# final `length`/`keys` stage becomes the emission tail. Ops: 0 ==,
-# 1 !=, 2 <, 3 >, 4 <=, 5 >=, 6 bare truthiness (false/null drop).
-# Literal kinds: 0 integer, 1 verbatim string (no escapes), 2 true,
-# 3 false, 4 null. Pushes the main-walk segment count into meta_out;
-# returns the tail (0 none, 1 length, 2 keys) or -1 after a loud
-# error.
+# `select(<cond> [and|or <cond>]...)` becomes a kind-3 segment whose
+# payload packs its atom span (start * 4096 + count) into the shared
+# atom tables — `and` binds tighter than `or` (sum of products, left
+# to right with short-circuit), each atom is `<path> [op <literal>]`,
+# and inner paths append to the shared segment lists after the main
+# walk so the [0, n_main) prefix stays contiguous. `map(<path>)` is a
+# kind-4 segment building a new array (atom op 7), `has("key")` /
+# `has(N)` is a kind-5 segment emitting true/false (atom op 8), and
+# `first`/`last` are sugar for index segments 0 / -1. A final
+# `length`/`keys` stage becomes the emission tail. Atom ops: 0 ==,
+# 1 !=, 2 <, 3 >, 4 <=, 5 >=, 6 bare truthiness (false/null drop);
+# +128 marks an atom starting a new OR group. Literal kinds:
+# 0 integer, 1 verbatim string (no escapes), 2 true, 3 false,
+# 4 null. Pushes the main-walk segment count into meta_out; returns
+# the tail (0 none, 1 length, 2 keys) or -1 after a loud error.
 fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<Int>, sel_lit: List<Int>, sel_span: List<Int>, spool: List<Str>, meta_out: List<Int>) -> Int {
     let src = f.trim()
     let n = src.len()
@@ -673,95 +779,114 @@ fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<
                     eprint("error: select needs a condition")
                     return 0 - 1
                 }
-                # find a top-level comparison operator outside quotes
-                let mut op = 6
-                let mut opat = 0 - 1
-                let mut oplen = 0
+                # split the condition on top-level ` and ` / ` or `
+                # connectors outside quotes; each piece is one atom and
+                # an `or` connector starts a new group on the next atom.
+                let astart = sel_meta.len()
+                let mut afrom = 0
+                let mut gflag = 0
                 let mut k = 0
                 let mut kinq = 0
-                while k < inner.len() {
-                    let b = inner[k]
-                    if b == 34 {
-                        if kinq == 1 { kinq = 0 } else { kinq = 1 }
-                    }
-                    if kinq == 0 and opat < 0 {
-                        if b == 61 and k + 1 < inner.len() {
-                            if inner[k + 1] == 61 { op = 0; opat = k; oplen = 2 }
-                        }
-                        if b == 33 and k + 1 < inner.len() {
-                            if inner[k + 1] == 61 { op = 1; opat = k; oplen = 2 }
-                        }
-                        if b == 60 {
-                            if k + 1 < inner.len() and inner[k + 1] == 61 { op = 4; opat = k; oplen = 2 }
-                            else { op = 2; opat = k; oplen = 1 }
-                        }
-                        if b == 62 {
-                            if k + 1 < inner.len() and inner[k + 1] == 61 { op = 5; opat = k; oplen = 2 }
-                            else { op = 3; opat = k; oplen = 1 }
-                        }
-                    }
-                    k += 1
-                }
-                let mut lhs = inner
-                let mut litk = 0
-                let mut litv = 0
-                if opat >= 0 {
-                    lhs = str_slice(inner, 0, opat).trim()
-                    let rhs = str_slice(inner, opat + oplen, inner.len() - opat - oplen).trim()
-                    if rhs.len() == 0 {
-                        eprint("error: select comparison needs a literal")
-                        return 0 - 1
-                    }
-                    if rhs == "true" {
-                        litk = 2
-                    } else if rhs == "false" {
-                        litk = 3
-                    } else if rhs == "null" {
-                        litk = 4
-                    } else if rhs[0] == 34 {
-                        if rhs.len() < 2 or rhs[rhs.len() - 1] != 34 {
-                            eprint("error: unterminated string literal in select")
-                            return 0 - 1
-                        }
-                        litk = 1
-                        litv = intern(str_slice(rhs, 1, rhs.len() - 2), spool)
+                while k <= inner.len() {
+                    let mut cut = 0
+                    let mut clen = 0
+                    let mut next_gflag = 0
+                    if k == inner.len() {
+                        cut = 1
                     } else {
-                        let mut rj = 0
-                        let mut rneg = 0
-                        if rhs[0] == 45 {
-                            rneg = 1
-                            rj = 1
+                        let b = inner[k]
+                        if b == 34 {
+                            if kinq == 1 { kinq = 0 } else { kinq = 1 }
                         }
-                        let mut racc = 0
-                        let mut rdigs = 0
-                        while rj < rhs.len() {
-                            let rd = rhs[rj]
-                            if rd < 48 or rd > 57 {
-                                eprint("error: select literals are integers, strings, true, false, or null")
-                                return 0 - 1
+                        if kinq == 0 and b == 32 {
+                            if k + 5 <= inner.len() and str_slice(inner, k, 5) == " and " {
+                                cut = 1
+                                clen = 5
+                            } else if k + 4 <= inner.len() and str_slice(inner, k, 4) == " or " {
+                                cut = 1
+                                clen = 4
+                                next_gflag = 1
                             }
-                            racc = racc * 10 + (rd - 48)
-                            rdigs += 1
-                            rj += 1
                         }
-                        if rdigs == 0 {
-                            eprint("error: select literals are integers, strings, true, false, or null")
+                    }
+                    if cut == 1 {
+                        let atom = str_slice(inner, afrom, k - afrom).trim()
+                        if atom.len() == 0 {
+                            eprint("error: select needs a condition on both connector sides")
                             return 0 - 1
                         }
-                        litk = 0
-                        if rneg == 1 { racc = 0 - racc }
-                        litv = racc
-                    }
-                    if op >= 2 and litk != 0 {
-                        eprint("error: ordered select comparisons need integer literals")
-                        return 0 - 1
+                        if parse_select_atom(atom, sel_meta, sel_lit, pend_paths, spool, gflag) != 0 { return 0 - 1 }
+                        gflag = next_gflag
+                        afrom = k + clen
+                        if clen > 0 { k = k + clen } else { k += 1 }
+                    } else {
+                        k += 1
                     }
                 }
-                sel_meta.push(op * 16 + litk)
-                sel_lit.push(litv)
-                pend_paths.push(lhs)
+                let acount = sel_meta.len() - astart
                 seg_kind.push(3)
+                seg_pay.push(astart * 4096 + acount)
+            } else if part.len() >= 6 and str_slice(part, 0, 4) == "map(" {
+                if part[part.len() - 1] != 41 {
+                    eprint("error: map is missing its closing parenthesis")
+                    return 0 - 1
+                }
+                let minner = str_slice(part, 4, part.len() - 5).trim()
+                if minner.len() == 0 {
+                    eprint("error: map needs a path")
+                    return 0 - 1
+                }
+                sel_meta.push(7 * 16)
+                sel_lit.push(0)
+                pend_paths.push(minner)
+                seg_kind.push(4)
                 seg_pay.push(sel_meta.len() - 1)
+            } else if part.len() >= 6 and str_slice(part, 0, 4) == "has(" {
+                if part[part.len() - 1] != 41 {
+                    eprint("error: has is missing its closing parenthesis")
+                    return 0 - 1
+                }
+                let hinner = str_slice(part, 4, part.len() - 5).trim()
+                let mut hlitk = 0
+                let mut hlit = 0
+                if hinner.len() >= 2 and hinner[0] == 34 {
+                    if hinner[hinner.len() - 1] != 34 {
+                        eprint("error: unterminated string literal in has")
+                        return 0 - 1
+                    }
+                    hlitk = 1
+                    hlit = intern(str_slice(hinner, 1, hinner.len() - 2), spool)
+                } else {
+                    let mut hj = 0
+                    let mut hdigs = 0
+                    let mut hacc = 0
+                    while hj < hinner.len() {
+                        let hd = hinner[hj]
+                        if hd < 48 or hd > 57 {
+                            eprint("error: has needs a string key or a non-negative index")
+                            return 0 - 1
+                        }
+                        hacc = hacc * 10 + (hd - 48)
+                        hdigs += 1
+                        hj += 1
+                    }
+                    if hdigs == 0 {
+                        eprint("error: has needs a string key or a non-negative index")
+                        return 0 - 1
+                    }
+                    hlit = hacc
+                }
+                sel_meta.push(8 * 16 + hlitk)
+                sel_lit.push(hlit)
+                pend_paths.push(".")
+                seg_kind.push(5)
+                seg_pay.push(sel_meta.len() - 1)
+            } else if part == "first" {
+                seg_kind.push(1)
+                seg_pay.push(0)
+            } else if part == "last" {
+                seg_kind.push(1)
+                seg_pay.push(0 - 1)
             } else {
                 if parse_path_into(part, seg_kind, seg_pay, spool, 1) != 0 { return 0 - 1 }
             }
@@ -837,6 +962,51 @@ fn walk_path(v: Int, from: Int, to: Int, seg_kind: List<Int>, seg_pay: List<Int>
         si += 1
     }
     cur
+}
+
+# Evaluate a select's atom span [astart, astart+acount) as a sum of
+# products: `and` chains atoms inside a group, an atom carrying the
+# +128 flag starts a new OR group, and the first passing group wins
+# (left to right, short-circuit — later atoms stay unevaluated once a
+# group fails or the whole select passes). Returns 1 pass, 0 drop,
+# 3 on a loud error.
+fn select_groups_pass(v: Int, astart: Int, acount: Int, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<Int>, sel_lit: List<Int>, sel_span: List<Int>, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Int {
+    let aend = astart + acount
+    let mut ai = astart
+    let mut overall = 0
+    while ai < aend {
+        if overall == 1 {
+            ai = aend
+        } else {
+            let mut group_ok = 1
+            let mut aj = ai
+            let mut scanning = 1
+            while scanning == 1 {
+                if aj >= aend {
+                    scanning = 0
+                } else {
+                    let meta = sel_meta[aj]
+                    if aj > ai and meta >= 128 {
+                        scanning = 0
+                    } else {
+                        if group_ok == 1 {
+                            let pv = walk_path(v, sel_span[aj * 2], sel_span[aj * 2 + 1], seg_kind, seg_pay, spool, heads, ckeys, cvals, cnexts)
+                            if pv == err_val() { return 3 }
+                            let mut m2 = meta
+                            if m2 >= 128 { m2 = m2 - 128 }
+                            let r = select_passes(pv, m2, sel_lit[aj], spool)
+                            if r == 3 { return 3 }
+                            if r == 0 { group_ok = 0 }
+                        }
+                        aj += 1
+                    }
+                }
+            }
+            if group_ok == 1 { overall = 1 }
+            ai = aj
+        }
+    }
+    overall
 }
 
 # Decide whether the selected value passes the packed op/literal.
@@ -1011,13 +1181,73 @@ fn eval_filter(v: Int, si: Int, n_main: Int, seg_kind: List<Int>, seg_pay: List<
         return eval_filter(found2, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
     }
     if kind == 3 {
-        let sj = seg_pay[si]
-        let pv = walk_path(v, sel_span[sj * 2], sel_span[sj * 2 + 1], seg_kind, seg_pay, spool, heads, ckeys, cvals, cnexts)
-        if pv == err_val() { return 3 }
-        let verdict = select_passes(pv, sel_meta[sj], sel_lit[sj], spool)
+        let pay = seg_pay[si]
+        let astart = pay / 4096
+        let acount = pay - astart * 4096
+        let verdict = select_groups_pass(v, astart, acount, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, spool, heads, ckeys, cvals, cnexts)
         if verdict == 3 { return 3 }
         if verdict == 0 { return 0 }
         return eval_filter(v, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
+    if kind == 4 {
+        # map(<path>): materialize a fresh array from each element's
+        # single-valued walk. Arrays only, loud otherwise.
+        let mj = seg_pay[si]
+        if is_arr_val(v) == 0 {
+            eprint("error: map needs an array")
+            return 3
+        }
+        heads.push(0 - 1)
+        let hidx = heads.len() - 1
+        let mut prev = 0 - 1
+        let mut cellm = heads[v - arr_base()]
+        while cellm >= 0 {
+            let mv = walk_path(cvals[cellm], sel_span[mj * 2], sel_span[mj * 2 + 1], seg_kind, seg_pay, spool, heads, ckeys, cvals, cnexts)
+            if mv == err_val() { return 3 }
+            ckeys.push(0 - 1)
+            cvals.push(mv)
+            cnexts.push(0 - 1)
+            let ncell = cvals.len() - 1
+            if prev < 0 {
+                heads[hidx] = ncell
+            } else {
+                cnexts[prev] = ncell
+            }
+            prev = ncell
+            cellm = cnexts[cellm]
+        }
+        return eval_filter(arr_base() + hidx, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
+    if kind == 5 {
+        # has("key") on objects / has(N) on arrays, emitting a boolean.
+        let hj = seg_pay[si]
+        let hlitk = sel_meta[hj] - 8 * 16
+        let mut ans = false_val()
+        if hlitk == 1 {
+            if is_obj_val(v) == 0 {
+                eprint("error: has with a string key needs an object")
+                return 3
+            }
+            let want3 = spool[sel_lit[hj] - str_base()]
+            let mut cellh = heads[v - obj_base()]
+            while cellh >= 0 {
+                if spool[ckeys[cellh] - str_base()] == want3 {
+                    ans = true_val()
+                    cellh = 0 - 1
+                } else {
+                    cellh = cnexts[cellh]
+                }
+            }
+        } else {
+            if is_arr_val(v) == 0 {
+                eprint("error: has with an index needs an array")
+                return 3
+            }
+            if sel_lit[hj] < count_cells(v, arr_base(), heads, cnexts) {
+                ans = true_val()
+            }
+        }
+        return eval_filter(ans, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
     }
     let mut base = arr_base()
     if is_obj_val(v) == 1 {
@@ -1137,6 +1367,25 @@ fn self_test() -> Int {
     if check_query("[1]", ".[] | select(.a > x)", 1, 3, "") != 1 { return 43 }
     if check_query("[{\"a\":\"s\"}]", ".[] | select(.a > 1)", 1, 3, "") != 1 { return 44 }
     if check_query("{\"a\":1}", ". | length | .a", 1, 3, "") != 1 { return 45 }
+    # map: projection, null for missing, non-array is loud
+    if check_query("{\"users\":[{\"n\":1},{\"n\":2}]}", ".users | map(.n)", 1, 0, "[1,2]") != 1 { return 46 }
+    if check_query("[{\"n\":1},{}]", ". | map(.n)", 1, 0, "[1,null]") != 1 { return 47 }
+    if check_query("{\"a\":1}", ". | map(.a)", 1, 3, "") != 1 { return 48 }
+    if check_query("{\"users\":[{\"n\":1},{\"n\":2}]}", ".users | map(.n) | length", 1, 0, "2") != 1 { return 49 }
+    # has: object keys, array indexes, wrong types are loud
+    if check_query("{\"a\":1}", ". | has(\"a\")", 1, 0, "true") != 1 { return 50 }
+    if check_query("{\"a\":1}", ". | has(\"b\")", 1, 0, "false") != 1 { return 51 }
+    if check_query("[10,20]", ". | has(1)", 1, 0, "true") != 1 { return 52 }
+    if check_query("[10,20]", ". | has(2)", 1, 0, "false") != 1 { return 53 }
+    if check_query("[10]", ". | has(\"a\")", 1, 3, "") != 1 { return 54 }
+    # first/last sugar over indexes
+    if check_query("[10,20,30]", ". | first", 1, 0, "10") != 1 { return 55 }
+    if check_query("[10,20,30]", ". | last", 1, 0, "30") != 1 { return 56 }
+    if check_query("[]", ". | first", 1, 0, "null") != 1 { return 57 }
+    # select multi-condition: and, or, and-over-or precedence
+    if check_query("[{\"n\":5,\"ok\":true},{\"n\":9,\"ok\":false},{\"n\":9,\"ok\":true}]", ".[] | select(.n > 6 and .ok) | .n", 1, 0, "9") != 1 { return 58 }
+    if check_query("[{\"n\":1},{\"n\":5},{\"n\":9}]", ".[] | select(.n == 1 or .n == 9) | .n", 1, 0, "1\n9") != 1 { return 59 }
+    if check_query("[{\"n\":2,\"t\":\"a\"},{\"n\":9,\"t\":\"b\"},{\"n\":9,\"t\":\"a\"}]", ".[] | select(.n > 8 and .t == \"a\" or .n < 3) | .n", 1, 0, "2\n9") != 1 { return 60 }
     42
 }
 

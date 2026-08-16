@@ -4,6 +4,17 @@
 
 ### Added
 
+- vaisjq expansion two: `map(<path>)` materializes a fresh array
+  from each element's single-valued walk (missing fields map to
+  null, non-arrays are loud), `has("key")`/`has(N)` emits true/false
+  for object keys and array indexes, `first`/`last` compile as sugar
+  for indexes 0 and -1, and select conditions chain with `and`/`or`
+  — `and` binds tighter than `or` (sum of products), evaluation
+  short-circuits left to right, and the atoms reuse the packed
+  op/literal tables with a +128 group flag, so eval_filter keeps its
+  sixteen-parameter shape with no new lists. Self-test grows to 60
+  cases and the workflow gate adds five expansion cases.
+
 - vaisjq filter expansion: multi-stage pipes where pure path stages
   concatenate (`.users[] | .name` walks like `.users[].name`) and
   `length`/`keys` stay terminal-only with a loud rejection otherwise;

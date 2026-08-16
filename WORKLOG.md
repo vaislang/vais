@@ -1,5 +1,24 @@
 # Vais Worklog
 
+## 2026-08-13b (vaisjq 확장 2 — map/has/first·last/다중 조건)
+
+**파라미터 예산 설계가 핵심**: eval_filter가 이미 16-param 상한이라
+신규 스테이지 3종+다중 조건을 **기존 atom 테이블 재사용**으로 수용 —
+map은 atom op 7(경로 스팬만), has는 op 8(litk/lit이 인자),
+select 다중 조건은 atom 여럿 + meta 128비트 OR-그룹 플래그 +
+seg_pay=astart*4096+acount 팩킹. 신규 리스트/파라미터 0개.
+
+**map**: 원소별 walk_path(단일값 계약)로 새 배열을 셀 힙에 실체화 —
+소스 셀은 push 앞 인덱스라 append 간섭 없음. 결측→null(jq 동일),
+비배열 LOUD. **has**: 객체 키 스캔/배열 인덱스 범위, 타입 위반 LOUD.
+**first/last**: 파스 단계에서 인덱스 세그먼트 0/-1로 컴파일 —
+평가기 무변경. **다중 조건**: ` and `/` or ` 분할(따옴표 인지),
+jq 우선순위(and > or) = sum-of-products, 그룹 실패 시 잔여 atom
+스킵·그룹 통과 시 전체 통과 단락. 프로브: (admin and age>32 or
+name=="bo") → bo,cy 정확.
+
+첫 빌드 60케이스 전부 정답, 컴파일러 갭 0. 게이트 vaisjq 22케이스.
+
 ## 2026-08-13 (vaisjq 필터 확장 — 파이프/select/음수 인덱스)
 
 **파이프 다단**: 톱레벨 `|` 분할(따옴표 상태 추적) — 통찰: 순수 경로

@@ -480,6 +480,11 @@ expect_exit "vaisjq select string equality" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' 
 expect_exit "vaisjq negative index from end" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' -c '.users[-1].name' '$tmp/vaisjq-t.json' | grep -qx '\"bo\"'"
 expect_exit "vaisjq pipe stages concatenate" 0 /bin/sh -c "printf '{\"a\":{\"b\":[1,2,3]}}' | '$jq_dist/bin/vaisjq' '.a | .b | length' | grep -qx '3'"
 expect_exit "vaisjq select iteration rejects loud" 3 /bin/sh -c "printf '[1]' | '$jq_dist/bin/vaisjq' '.[] | select(.a[] > 1)' >/dev/null 2>&1"
+expect_exit "vaisjq map projects arrays" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' -c '.users | map(.name)' '$tmp/vaisjq-t.json' | grep -qx '\[\"ann\",\"bo\"\]'"
+expect_exit "vaisjq has checks keys" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' '.users[0] | has(\"age\")' '$tmp/vaisjq-t.json' | grep -qx 'true'"
+expect_exit "vaisjq first and last are index sugar" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' -c '.users | last | .name' '$tmp/vaisjq-t.json' | grep -qx '\"bo\"'"
+expect_exit "vaisjq select and or with precedence" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' '.users[] | select(.age > 29 and .name == \"ann\" or .age < 26) | .age' '$tmp/vaisjq-t.json' | tr '\n' ' ' | grep -q '30 25 '"
+expect_exit "vaisjq map on non-array rejects loud" 3 /bin/sh -c "printf '{\"a\":1}' | '$jq_dist/bin/vaisjq' '. | map(.a)' >/dev/null 2>&1"
 
 vbox_dist="$tmp/vaisbox-dist"
 vbox_bin="$tmp/vaisbox-bin"
