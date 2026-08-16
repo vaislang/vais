@@ -31,8 +31,10 @@
 # null), `sort`/`unique` over homogeneous number or string arrays,
 # object construction `{key: <path>, "quoted": <path>, shorthand}`
 # (shorthand walks `.key`, later duplicate keys overwrite, missing
-# paths turn null), and a terminal `| length` or `| keys` stage
-# (keys sorts). Missing fields and out-of-range indexes emit null
+# paths turn null), string templates `"text \(.path) more"` whose
+# holes render strings raw and everything else as compact JSON
+# (escapes: \\ and \" only, \( opens a hole), and a terminal
+# `| length` or `| keys` stage (keys sorts). Missing fields and out-of-range indexes emit null
 # and keep chaining (null indexes to null, jq-style); indexing or
 # iterating a value of the wrong type is a loud error with exit 3.
 #
@@ -1034,6 +1036,71 @@ fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<
                 let oacount = sel_meta.len() - oastart
                 seg_kind.push(12)
                 seg_pay.push(oastart * 4096 + oacount)
+            } else if part.len() >= 2 and part[0] == 34 {
+                # string interpolation: a quoted template whose \(...)
+                # holes carry single-valued paths. Each hole is one
+                # atom (op 10) holding the literal chunk before it and
+                # the hole path; the trailing literal rides a litk-1
+                # atom with no hole. Escapes: \\ and \" only, \( opens
+                # a hole, everything else is verbatim.
+                if part[part.len() - 1] != 34 {
+                    eprint("error: unterminated string template")
+                    return 0 - 1
+                }
+                let tastart = sel_meta.len()
+                let mut tb = str_builder_new()
+                let mut ti = 1
+                let tend = part.len() - 1
+                while ti < tend {
+                    let tc = part[ti]
+                    if tc == 92 and ti + 1 < tend {
+                        let tn = part[ti + 1]
+                        if tn == 40 {
+                            let mut tclose = ti + 2
+                            let mut tfound = 0 - 1
+                            while tclose < tend {
+                                if part[tclose] == 41 {
+                                    tfound = tclose
+                                    tclose = tend
+                                } else {
+                                    tclose += 1
+                                }
+                            }
+                            if tfound < 0 {
+                                eprint("error: unterminated \\( hole in template")
+                                return 0 - 1
+                            }
+                            let hpath = str_slice(part, ti + 2, tfound - ti - 2).trim()
+                            if hpath.len() == 0 {
+                                eprint("error: empty \\( hole in template")
+                                return 0 - 1
+                            }
+                            sel_meta.push(10 * 16)
+                            sel_lit.push(intern(str_builder_finish(tb), spool))
+                            pend_paths.push(hpath)
+                            tb = str_builder_new()
+                            ti = tfound + 1
+                        } else if tn == 92 {
+                            let tp1 = str_builder_push(tb, 92)
+                            ti += 2
+                        } else if tn == 34 {
+                            let tp2 = str_builder_push(tb, 34)
+                            ti += 2
+                        } else {
+                            let tp3 = str_builder_push(tb, 92)
+                            ti += 1
+                        }
+                    } else {
+                        let tp4 = str_builder_push(tb, tc)
+                        ti += 1
+                    }
+                }
+                sel_meta.push(10 * 16 + 1)
+                sel_lit.push(intern(str_builder_finish(tb), spool))
+                pend_paths.push(".")
+                let tacount = sel_meta.len() - tastart
+                seg_kind.push(13)
+                seg_pay.push(tastart * 4096 + tacount)
             } else if part == "min" {
                 seg_kind.push(8)
                 seg_pay.push(0)
@@ -1639,6 +1706,30 @@ fn eval_filter(v: Int, si: Int, n_main: Int, seg_kind: List<Int>, seg_pay: List<
         }
         return eval_filter(obj_base() + ohidx, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
     }
+    if kind == 13 {
+        # string template: literal chunks interleave with rendered
+        # holes — hole strings render raw, everything else renders as
+        # compact JSON.
+        let tpay = seg_pay[si]
+        let tastart = tpay / 4096
+        let tacount = tpay - tastart * 4096
+        let rb = str_builder_new()
+        let mut ta = tastart
+        while ta < tastart + tacount {
+            let ochunk = str_builder_append(rb, spool[sel_lit[ta] - str_base()])
+            if sel_meta[ta] == 10 * 16 {
+                let hv = walk_path(v, sel_span[ta * 2], sel_span[ta * 2 + 1], seg_kind, seg_pay, spool, heads, ckeys, cvals, cnexts)
+                if hv == err_val() { return 3 }
+                if is_str_val(hv) == 1 {
+                    let oraw = str_builder_append(rb, spool[hv - str_base()])
+                } else {
+                    let ojson = str_builder_append(rb, render_compact(hv, spool, heads, ckeys, cvals, cnexts))
+                }
+            }
+            ta += 1
+        }
+        return eval_filter(intern(str_builder_finish(rb), spool), si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
     if kind == 7 {
         # join("sep"): strings verbatim, numbers stringified, null
         # empty; anything else is loud.
@@ -1842,6 +1933,14 @@ fn self_test() -> Int {
     if check_query("{\"a\":1,\"b\":2}", ". | {x: .a, x: .b}", 1, 0, "{\"x\":2}") != 1 { return 86 }
     if check_query("{\"a\":1}", ". | {z: .missing}", 1, 0, "{\"z\":null}") != 1 { return 87 }
     if check_query("{\"users\":[{\"name\":\"ann\",\"age\":30},{\"name\":\"bo\",\"age\":25}]}", ".users[] | {who: .name}", 1, 0, "{\"who\":\"ann\"}\n{\"who\":\"bo\"}") != 1 { return 88 }
+    # string templates: raw strings, compact JSON for the rest
+    if check_query("{\"name\":\"ann\",\"age\":30}", ". | \"\\(.name) is \\(.age)\"", 1, 0, "\"ann is 30\"") != 1 { return 89 }
+    if check_query("{\"users\":[{\"name\":\"ann\"},{\"name\":\"bo\"}]}", ".users[] | \"hi \\(.name)\"", 1, 0, "\"hi ann\"\n\"hi bo\"") != 1 { return 90 }
+    if check_query("{\"a\":[1,2]}", ". | \"xs=\\(.a)\"", 1, 0, "\"xs=[1,2]\"") != 1 { return 91 }
+    if check_query("{\"a\":1}", ". | \"m=\\(.missing)\"", 1, 0, "\"m=null\"") != 1 { return 92 }
+    if check_query("{\"a\":1}", ". | \"plain\"", 1, 0, "\"plain\"") != 1 { return 93 }
+    if check_query("{\"a\":1}", ". | \"b=\\\\z\"", 1, 0, "\"b=\\\\z\"") != 1 { return 94 }
+    if check_query("{\"name\":\"bo\",\"age\":25}", ". | \"\\(.name)/\\(.age)\" | length", 1, 0, "5") != 1 { return 95 }
     42
 }
 

@@ -22,7 +22,19 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-13d) — vaisjq 4라운드: sort/unique/객체 생성
+## 현재 작업 (2026-08-13e) — vaisjq 5라운드: 문자열 보간 템플릿
+모드: 개별선택 (사용자 지시 — 5라운드까지 연속 진행 중 2/2)
+- [x] 1. 템플릿 스테이지 ✅ 2026-08-13 — 따옴표 스테이지(kind 13):
+      \(...) 홀=단일값 경로(반복 LOUD), 홀 문자열 raw/그 외 compact
+      JSON 렌더, 이스케이프 \\·\"만(\(가 홀). atom op 10(sel_lit=
+      선행 리터럴 청크, litk 1=꼬리 전용) — 16-param 불변.
+- [x] 2. 잠금 ✅ — 첫 빌드 정답. self-test 89~95(95케이스), 게이트
+      +4(보간/컨테이너 compact/select 합성/홀 반복 LOUD).
+- [x] 3. 문서 + 래더 ✅ — fmt/workflow/test.sh 417/parity 417/
+      release 전부 GREEN.
+진행률: 3/3 (100%)
+
+## 직전 완료 (2026-08-13d) — vaisjq 4라운드: sort/unique/객체 생성
 모드: 개별선택 (사용자 지시 — 5라운드까지 연속 진행 중 1/2)
 - [x] 1. sort/unique ✅ 2026-08-13 — 동종 배열(수: List<Int>.sort/
       문자열: 내용 정렬 후 재-intern), 혼합 LOUD, ≤1원소 통과,

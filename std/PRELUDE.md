@@ -152,7 +152,9 @@ or string concatenation; empty is null), `join("sep")` (strings verbatim,
 numbers stringified, null empty), `min`/`max` (numbers only, empty null),
 `sort`/`unique` over homogeneous number or string arrays, object
 construction `{key: <path>, "quoted": <path>, shorthand}` with later
-duplicate keys overwriting, and a terminal `| length` / `| keys` stage,
+duplicate keys overwriting, string templates `"text \(.path) more"` whose
+holes render strings raw and other values as compact JSON, and a terminal
+`| length` / `| keys` stage,
 printing pretty two-space JSON by default and compact JSON with `-c`. Missing fields chain as null; wrong-type access,
 non-integer numbers, `\u` escapes, iterating inside a select or map path,
 and trailing garbage are loud exit-3 errors. Reading is a file argument or

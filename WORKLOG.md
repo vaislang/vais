@@ -1,5 +1,19 @@
 # Vais Worklog
 
+## 2026-08-13e (vaisjq 5라운드 — 문자열 보간 템플릿)
+
+따옴표로 시작하는 파이프 스테이지 = 템플릿(kind 13). 파스: 리터럴
+청크를 빌더로 모으다 \(를 만나면 (선행 청크, 홀 경로)를 atom op
+10으로 방출하고 **빌더 재바인딩**(let mut — finish 후 재사용은
+미검증 표면), 꼬리 청크는 litk 1 원자. 이스케이프는 \\·\"만,
+그 외 백슬래시는 verbatim(문서 명기). 렌더: 홀 문자열 raw(따옴표
+없음 — jq 관용), 숫자/불리언/null/컨테이너는 render_compact 재사용.
+`.users[] | select(.age > 26) | "senior: \(.name)"` 합성이 사용례.
+
+첫 빌드 95케이스 전부 정답. 게이트 vaisjq 36케이스. 5라운드 연속
+진행 완료 — vaisjq 아크 6사이클(파서→파이프·select→map·has→집계→
+정렬·재구성→보간) 종결.
+
 ## 2026-08-13d (vaisjq 4라운드 — sort/unique/객체 생성)
 
 **sort/unique**(kind 10·11): 동종 검사 후 수는 List<Int>.sort(),

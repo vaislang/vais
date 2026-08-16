@@ -4,6 +4,19 @@
 
 ### Added
 
+- vaisjq round 5, string templates: a quoted pipe stage
+  `"text \(.path) more"` renders the piped value into a string —
+  hole paths are single-valued (iteration inside one is loud), hole
+  strings render raw while numbers, booleans, null, arrays, and
+  objects render as compact JSON, and the only recognized escapes
+  are `\\` and `\"` (with `\(` opening a hole). Templates ride
+  the atom tables as op 10 — each hole atom carries the literal
+  chunk before it, a trailing litk-1 atom carries the tail — so
+  eval_filter stays at sixteen parameters. Composes with the rest of
+  the pipeline (`.users[] | select(.age > 26) | "senior: \(.name)"`).
+  Self-test grows to 95 cases and the workflow gate adds four
+  template cases.
+
 - vaisjq round 4, ordering and reshaping: `sort` orders homogeneous
   number or string arrays (mixed or unsupported element types are
   loud, arrays of at most one element pass through), `unique` sorts

@@ -495,6 +495,10 @@ expect_exit "vaisjq unique drops duplicates" 0 /bin/sh -c "printf '[\"b\",\"a\",
 expect_exit "vaisjq object construction projects" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' -c '.users[] | {who: .name, age}' '$tmp/vaisjq-t.json' | tr '\n' ' ' | grep -q '{\"who\":\"ann\",\"age\":30} {\"who\":\"bo\",\"age\":25} '"
 expect_exit "vaisjq object duplicate key overwrites" 0 /bin/sh -c "printf '{\"a\":1,\"b\":2}' | '$jq_dist/bin/vaisjq' -c '. | {x: .a, x: .b}' | grep -qx '{\"x\":2}'"
 expect_exit "vaisjq sort mixed rejects loud" 3 /bin/sh -c "printf '[1,\"a\"]' | '$jq_dist/bin/vaisjq' '. | sort' >/dev/null 2>&1"
+expect_exit "vaisjq template interpolates per value" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' '.users[] | \"\\(.name) is \\(.age)\"' '$tmp/vaisjq-t.json' | tr '\n' ' ' | grep -q '\"ann is 30\" \"bo is 25\" '"
+expect_exit "vaisjq template renders containers compact" 0 /bin/sh -c "printf '{\"a\":[1,2]}' | '$jq_dist/bin/vaisjq' '. | \"xs=\\(.a)\"' | grep -qx '\"xs=\[1,2\]\"'"
+expect_exit "vaisjq template composes with select" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' '.users[] | select(.age > 26) | \"senior: \\(.name)\"' '$tmp/vaisjq-t.json' | grep -qx '\"senior: ann\"'"
+expect_exit "vaisjq template iteration hole rejects loud" 3 /bin/sh -c "printf '{\"a\":1}' | '$jq_dist/bin/vaisjq' '. | \"\\(.a[]) x\"' >/dev/null 2>&1"
 
 vbox_dist="$tmp/vaisbox-dist"
 vbox_bin="$tmp/vaisbox-bin"

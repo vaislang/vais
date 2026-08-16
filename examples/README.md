@@ -419,8 +419,9 @@ an integer JSON parser over tagged-Int values (string pool plus a shared
 `select(...)` with comparisons, bare truthiness, `and`/`or` chains, and
 `has(...)` atoms, `map(...)`, `has(...)`, `first`/`last`, `add`,
 `join("sep")`, `min`/`max`, `sort`/`unique`, object construction
-`{key: .path, shorthand}`, `| length` / `| keys`), pretty and compact
-rendering, and loud parse/type/file errors,
+`{key: .path, shorthand}`, string templates with `\(.path)` holes,
+`| length` / `| keys`), pretty and compact rendering, and loud
+parse/type/file errors,
 `examples/e397_sixteen_params.vais` for sixteen-parameter functions on both
 engines (Int, Str, and List parameters mixed; seventeen rejects at the
 front),
