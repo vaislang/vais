@@ -4,6 +4,17 @@
 
 ### Added
 
+- vaisjq round 4, ordering and reshaping: `sort` orders homogeneous
+  number or string arrays (mixed or unsupported element types are
+  loud, arrays of at most one element pass through), `unique` sorts
+  and drops adjacent duplicates, and object construction
+  `{key: <path>, "quoted key": <path>, shorthand}` builds a fresh
+  object from the piped value — shorthand entries walk `.key`,
+  missing paths turn null, and later duplicate keys overwrite.
+  Entries reuse the atom tables (op 9: interned key plus value
+  path), so eval_filter keeps its sixteen-parameter shape. Self-test
+  grows to 88 cases and the workflow gate adds five round-4 cases.
+
 - vaisjq round 3, aggregation and membership: `add` sums number
   arrays (guarded against leaving the integer band) or concatenates
   string arrays, with empty arrays yielding null and mixed element

@@ -28,10 +28,13 @@
 # string concatenation; empty is null, mixed is loud, sums stay
 # inside the integer band), `join("sep")` (strings verbatim, numbers
 # stringified, null empty), `min`/`max` (numbers only, empty is
-# null), and a terminal `| length` or `| keys` stage (keys sorts).
-# Missing fields and out-of-range indexes emit null and keep
-# chaining (null indexes to null, jq-style); indexing or iterating a
-# value of the wrong type is a loud error with exit 3.
+# null), `sort`/`unique` over homogeneous number or string arrays,
+# object construction `{key: <path>, "quoted": <path>, shorthand}`
+# (shorthand walks `.key`, later duplicate keys overwrite, missing
+# paths turn null), and a terminal `| length` or `| keys` stage
+# (keys sorts). Missing fields and out-of-range indexes emit null
+# and keep chaining (null indexes to null, jq-style); indexing or
+# iterating a value of the wrong type is a loud error with exit 3.
 #
 # Modes: no arguments runs the deterministic self-test (the
 # release-corpus entry), `vaisjq [-c] <filter> [file]` queries a file
@@ -940,6 +943,97 @@ fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<
             } else if part == "add" {
                 seg_kind.push(6)
                 seg_pay.push(0)
+            } else if part == "sort" {
+                seg_kind.push(10)
+                seg_pay.push(0)
+            } else if part == "unique" {
+                seg_kind.push(11)
+                seg_pay.push(0)
+            } else if part.len() >= 2 and part[0] == 123 {
+                # object construction: {key: <path>, "quoted": <path>,
+                # shorthand} — each entry is one atom (op 9) carrying
+                # the interned key and its value path (shorthand `key`
+                # walks `.key`). Later duplicate keys overwrite.
+                if part[part.len() - 1] != 125 {
+                    eprint("error: object construction is missing }")
+                    return 0 - 1
+                }
+                let oinner = str_slice(part, 1, part.len() - 2).trim()
+                let oastart = sel_meta.len()
+                if oinner.len() > 0 {
+                    let mut oi = 0
+                    let mut ofrom = 0
+                    let mut oinq = 0
+                    while oi <= oinner.len() {
+                        let mut ocut = 0
+                        if oi == oinner.len() {
+                            ocut = 1
+                        } else {
+                            let ob = oinner[oi]
+                            if ob == 34 {
+                                if oinq == 1 { oinq = 0 } else { oinq = 1 }
+                            }
+                            if oinq == 0 and ob == 44 { ocut = 1 }
+                        }
+                        if ocut == 1 {
+                            let entry = str_slice(oinner, ofrom, oi - ofrom).trim()
+                            if entry.len() == 0 {
+                                eprint("error: empty object construction entry")
+                                return 0 - 1
+                            }
+                            # split entry into key [: path]
+                            let mut kend = 0
+                            let mut kname = ""
+                            if entry[0] == 34 {
+                                let mut qk = 1
+                                let mut qfound = 0 - 1
+                                while qk < entry.len() {
+                                    if entry[qk] == 34 {
+                                        qfound = qk
+                                        qk = entry.len()
+                                    } else {
+                                        qk += 1
+                                    }
+                                }
+                                if qfound < 0 {
+                                    eprint("error: unterminated object key")
+                                    return 0 - 1
+                                }
+                                kname = str_slice(entry, 1, qfound - 1)
+                                kend = qfound + 1
+                            } else {
+                                let mut ik = 0
+                                while ik < entry.len() {
+                                    if is_ident_byte(entry[ik]) == 0 { break }
+                                    ik += 1
+                                }
+                                if ik == 0 {
+                                    eprint("error: object keys are identifiers or quoted strings")
+                                    return 0 - 1
+                                }
+                                kname = str_slice(entry, 0, ik)
+                                kend = ik
+                            }
+                            let rest = str_slice(entry, kend, entry.len() - kend).trim()
+                            let mut vpath = f".{kname}"
+                            if rest.len() > 0 {
+                                if rest[0] != 58 {
+                                    eprint("error: object entries need a : before the value path")
+                                    return 0 - 1
+                                }
+                                vpath = str_slice(rest, 1, rest.len() - 1).trim()
+                            }
+                            sel_meta.push(9 * 16)
+                            sel_lit.push(intern(kname, spool))
+                            pend_paths.push(vpath)
+                            ofrom = oi + 1
+                        }
+                        oi += 1
+                    }
+                }
+                let oacount = sel_meta.len() - oastart
+                seg_kind.push(12)
+                seg_pay.push(oastart * 4096 + oacount)
             } else if part == "min" {
                 seg_kind.push(8)
                 seg_pay.push(0)
@@ -1413,6 +1507,138 @@ fn eval_filter(v: Int, si: Int, n_main: Int, seg_kind: List<Int>, seg_pay: List<
         }
         return eval_filter(best, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
     }
+    if kind == 10 or kind == 11 {
+        # sort orders a homogeneous array of numbers or strings;
+        # unique also drops adjacent duplicates after the sort.
+        if is_arr_val(v) == 0 {
+            eprint("error: sort and unique need an array")
+            return 3
+        }
+        let ints: List<Int> = []
+        let ss: List<Str> = []
+        let mut scnt = 0
+        let mut snums = 1
+        let mut sstrs = 1
+        let mut cells = heads[v - arr_base()]
+        while cells >= 0 {
+            let sv = cvals[cells]
+            if is_num_val(sv) == 1 {
+                sstrs = 0
+                ints.push(sv)
+            } else if is_str_val(sv) == 1 {
+                snums = 0
+                ss.push(spool[sv - str_base()])
+            } else {
+                snums = 0
+                sstrs = 0
+            }
+            scnt += 1
+            cells = cnexts[cells]
+        }
+        if scnt <= 1 {
+            return eval_filter(v, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+        }
+        if snums == 0 and sstrs == 0 {
+            eprint("error: sort and unique need all numbers or all strings")
+            return 3
+        }
+        heads.push(0 - 1)
+        let shidx = heads.len() - 1
+        let mut sprev = 0 - 1
+        if snums == 1 {
+            ints.sort()
+            let mut ii = 0
+            while ii < ints.len() {
+                let mut keep = 1
+                if kind == 11 {
+                    if ii > 0 {
+                        if ints[ii] == ints[ii - 1] { keep = 0 }
+                    }
+                }
+                if keep == 1 {
+                    ckeys.push(0 - 1)
+                    cvals.push(ints[ii])
+                    cnexts.push(0 - 1)
+                    let scell = cvals.len() - 1
+                    if sprev < 0 {
+                        heads[shidx] = scell
+                    } else {
+                        cnexts[sprev] = scell
+                    }
+                    sprev = scell
+                }
+                ii += 1
+            }
+        } else {
+            ss.sort()
+            let mut si2 = 0
+            while si2 < ss.len() {
+                let mut keep2 = 1
+                if kind == 11 {
+                    if si2 > 0 {
+                        if ss[si2] == ss[si2 - 1] { keep2 = 0 }
+                    }
+                }
+                if keep2 == 1 {
+                    ckeys.push(0 - 1)
+                    cvals.push(intern(ss[si2], spool))
+                    cnexts.push(0 - 1)
+                    let scell2 = cvals.len() - 1
+                    if sprev < 0 {
+                        heads[shidx] = scell2
+                    } else {
+                        cnexts[sprev] = scell2
+                    }
+                    sprev = scell2
+                }
+                si2 += 1
+            }
+        }
+        return eval_filter(arr_base() + shidx, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
+    if kind == 12 {
+        # object construction: walk each entry's path from the piped
+        # value; later duplicate keys overwrite earlier ones.
+        let opay = seg_pay[si]
+        let oastart = opay / 4096
+        let oacount = opay - oastart * 4096
+        heads.push(0 - 1)
+        let ohidx = heads.len() - 1
+        let mut oprev = 0 - 1
+        let mut oa = oastart
+        while oa < oastart + oacount {
+            let oval = walk_path(v, sel_span[oa * 2], sel_span[oa * 2 + 1], seg_kind, seg_pay, spool, heads, ckeys, cvals, cnexts)
+            if oval == err_val() { return 3 }
+            let okey = sel_lit[oa]
+            let oname = spool[okey - str_base()]
+            let mut dup = 0 - 1
+            let mut ocell = heads[ohidx]
+            while ocell >= 0 {
+                if spool[ckeys[ocell] - str_base()] == oname {
+                    dup = ocell
+                    ocell = 0 - 1
+                } else {
+                    ocell = cnexts[ocell]
+                }
+            }
+            if dup >= 0 {
+                cvals[dup] = oval
+            } else {
+                ckeys.push(okey)
+                cvals.push(oval)
+                cnexts.push(0 - 1)
+                let ncell2 = cvals.len() - 1
+                if oprev < 0 {
+                    heads[ohidx] = ncell2
+                } else {
+                    cnexts[oprev] = ncell2
+                }
+                oprev = ncell2
+            }
+            oa += 1
+        }
+        return eval_filter(obj_base() + ohidx, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
     if kind == 7 {
         # join("sep"): strings verbatim, numbers stringified, null
         # empty; anything else is loud.
@@ -1600,6 +1826,22 @@ fn self_test() -> Int {
     # has nested in select, alone and chained
     if check_query("[{\"a\":1},{\"b\":2},{\"a\":3}]", ".[] | select(has(\"a\")) | . | length", 1, 0, "1\n1") != 1 { return 74 }
     if check_query("[{\"a\":9},{\"b\":2},{\"a\":1}]", ".[] | select(has(\"a\") and .a > 5) | .a", 1, 0, "9") != 1 { return 75 }
+    # sort/unique: numbers, strings, small arrays, mixed is loud
+    if check_query("[5,2,9,2]", ". | sort", 1, 0, "[2,2,5,9]") != 1 { return 76 }
+    if check_query("[\"b\",\"a\",\"c\"]", ". | sort", 1, 0, "[\"a\",\"b\",\"c\"]") != 1 { return 77 }
+    if check_query("[5,2,9,2]", ". | unique", 1, 0, "[2,5,9]") != 1 { return 78 }
+    if check_query("[\"b\",\"a\",\"b\"]", ". | unique", 1, 0, "[\"a\",\"b\"]") != 1 { return 79 }
+    if check_query("[]", ". | sort", 1, 0, "[]") != 1 { return 80 }
+    if check_query("[1,\"a\"]", ". | sort", 1, 3, "") != 1 { return 81 }
+    if check_query("{\"xs\":[3,1,2]}", ".xs | sort | last", 1, 0, "3") != 1 { return 82 }
+    # object construction: explicit paths, shorthand, quoted keys,
+    # duplicate keys overwrite, missing paths turn null
+    if check_query("{\"user\":{\"name\":\"ann\",\"age\":30}}", ".user | {name: .name}", 1, 0, "{\"name\":\"ann\"}") != 1 { return 83 }
+    if check_query("{\"name\":\"bo\",\"age\":25}", ". | {name, age}", 1, 0, "{\"name\":\"bo\",\"age\":25}") != 1 { return 84 }
+    if check_query("{\"a\":1}", ". | {\"k v\": .a}", 1, 0, "{\"k v\":1}") != 1 { return 85 }
+    if check_query("{\"a\":1,\"b\":2}", ". | {x: .a, x: .b}", 1, 0, "{\"x\":2}") != 1 { return 86 }
+    if check_query("{\"a\":1}", ". | {z: .missing}", 1, 0, "{\"z\":null}") != 1 { return 87 }
+    if check_query("{\"users\":[{\"name\":\"ann\",\"age\":30},{\"name\":\"bo\",\"age\":25}]}", ".users[] | {who: .name}", 1, 0, "{\"who\":\"ann\"}\n{\"who\":\"bo\"}") != 1 { return 88 }
     42
 }
 

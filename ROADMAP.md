@@ -22,7 +22,22 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-13c) — vaisjq 3라운드: add/join/min·max + has 원자
+## 현재 작업 (2026-08-13d) — vaisjq 4라운드: sort/unique/객체 생성
+모드: 개별선택 (사용자 지시 — 5라운드까지 연속 진행 중 1/2)
+- [x] 1. sort/unique ✅ 2026-08-13 — 동종 배열(수: List<Int>.sort/
+      문자열: 내용 정렬 후 재-intern), 혼합 LOUD, ≤1원소 통과,
+      unique=정렬+인접 dedup. 스테이지 kind 10·11.
+- [x] 2. 객체 생성 ✅ — {key: .path, "quoted": …, shorthand}: 엔트리
+      =atom op 9(sel_lit=intern 키, pend=값 경로; shorthand는 .key),
+      중복 키 last-wins(기존 셀 덮어쓰기), 결측 경로 null. kind 12.
+      eval_filter 16-param 불변.
+- [x] 3. 잠금 ✅ — 첫 빌드 정답. self-test 76~88(88케이스), 게이트
+      +5(sort/unique/projection/dup-key/혼합 LOUD).
+- [x] 4. 문서 + 래더 ✅ — fmt/workflow/test.sh 417/parity 417/
+      release 전부 GREEN. 5라운드(문자열 보간) 연속.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-08-13c) — vaisjq 3라운드: add/join/min·max + has 원자
 모드: 개별선택 (집계 스테이지 + select 멤버십 합성)
 - [x] 1. add/join/min·max ✅ 2026-08-13 — 스테이지 kind 6~9: add(수
       합계 — 밴드 오버플로 가드/문자열 연결/빈→null/혼합 LOUD),

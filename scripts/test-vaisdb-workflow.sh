@@ -490,6 +490,11 @@ expect_exit "vaisjq map join renders csv" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' '.
 expect_exit "vaisjq min max reduce" 0 /bin/sh -c "printf '[5,2,9]' | '$jq_dist/bin/vaisjq' '. | max' | grep -qx '9'"
 expect_exit "vaisjq select has atom filters" 0 /bin/sh -c "printf '[{\"a\":9},{\"b\":2},{\"a\":1}]' | '$jq_dist/bin/vaisjq' '.[] | select(has(\"a\") and .a > 5) | .a' | grep -qx '9'"
 expect_exit "vaisjq add mixed rejects loud" 3 /bin/sh -c "printf '[1,\"a\"]' | '$jq_dist/bin/vaisjq' '. | add' >/dev/null 2>&1"
+expect_exit "vaisjq sort orders numbers" 0 /bin/sh -c "printf '[5,2,9,2]' | '$jq_dist/bin/vaisjq' -c '. | sort' | grep -qx '\[2,2,5,9\]'"
+expect_exit "vaisjq unique drops duplicates" 0 /bin/sh -c "printf '[\"b\",\"a\",\"b\"]' | '$jq_dist/bin/vaisjq' -c '. | unique' | grep -qx '\[\"a\",\"b\"\]'"
+expect_exit "vaisjq object construction projects" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' -c '.users[] | {who: .name, age}' '$tmp/vaisjq-t.json' | tr '\n' ' ' | grep -q '{\"who\":\"ann\",\"age\":30} {\"who\":\"bo\",\"age\":25} '"
+expect_exit "vaisjq object duplicate key overwrites" 0 /bin/sh -c "printf '{\"a\":1,\"b\":2}' | '$jq_dist/bin/vaisjq' -c '. | {x: .a, x: .b}' | grep -qx '{\"x\":2}'"
+expect_exit "vaisjq sort mixed rejects loud" 3 /bin/sh -c "printf '[1,\"a\"]' | '$jq_dist/bin/vaisjq' '. | sort' >/dev/null 2>&1"
 
 vbox_dist="$tmp/vaisbox-dist"
 vbox_bin="$tmp/vaisbox-bin"

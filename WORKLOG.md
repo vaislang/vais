@@ -1,5 +1,18 @@
 # Vais Worklog
 
+## 2026-08-13d (vaisjq 4라운드 — sort/unique/객체 생성)
+
+**sort/unique**(kind 10·11): 동종 검사 후 수는 List<Int>.sort(),
+문자열은 내용을 List<Str>로 뽑아 정렬 후 재-intern(태그 인덱스
+정렬은 무의미 — 풀 인덱스≠사전순). ≤1원소는 원본 통과, 혼합 LOUD.
+unique는 정렬 후 인접 동등 스킵. **객체 생성**(kind 12): 엔트리를
+atom op 9로 — sel_lit=intern된 키, pend=값 경로(shorthand `key`는
+`.key`로 확장, 따옴표 키 지원). 빌드 시 기존 셀 키 스캔으로 중복
+키 last-wins. `.users[] | {who: .name, age}` 프로젝션이 핵심 사용례.
+
+첫 빌드 88케이스 전부 정답, 컴파일러 무변경. 게이트 vaisjq
+32케이스. 5라운드(문자열 보간) 연속 진행.
+
 ## 2026-08-13c (vaisjq 3라운드 — add/join/min·max + select has 원자)
 
 집계 4종을 스테이지 kind 6~9로: **add**(전 원소 수→합계+**±1e15 밴드
