@@ -415,8 +415,9 @@ multiline form on both engines,
 `examples/e396_vaisjq_package` for the installable vaisjq JSON query tool —
 an integer JSON parser over tagged-Int values (string pool plus a shared
 (key, val, next) cell heap for arrays and objects) with jq-subset filters
-(field chains, indexes, `[]` iteration, `| length` / `| keys`), pretty and
-compact rendering, and loud parse/type/file errors,
+(field chains, `[N]`/`[-N]` indexes, `[]` iteration, multi-stage pipes,
+`select(...)` with comparisons and bare truthiness, `| length` / `| keys`),
+pretty and compact rendering, and loud parse/type/file errors,
 `examples/e397_sixteen_params.vais` for sixteen-parameter functions on both
 engines (Int, Str, and List parameters mixed; seventeen rejects at the
 front),

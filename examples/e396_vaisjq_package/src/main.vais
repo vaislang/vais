@@ -13,12 +13,16 @@
 # (\b, \f, and \uXXXX are loud errors), single top-level document
 # with trailing-garbage detection.
 #
-# Filters: `.` identity, `.name` field chains, `[N]` array index,
-# `[]` iteration (arrays emit elements, objects emit values), and one
-# optional pipe tail `| length` or `| keys` (keys sorts). Missing
-# fields and out-of-range indexes emit null and keep chaining (null
-# indexes to null, jq-style); indexing or iterating a value of the
-# wrong type is a loud error with exit 3.
+# Filters: `.` identity, `.name` field chains, `[N]`/`[-N]` array
+# indexes (negatives count from the end), `[]` iteration (arrays emit
+# elements, objects emit values), multi-stage pipes (pure path stages
+# concatenate), `select(<path> [op <literal>])` stages with == != <
+# > <= >= against integer/string/true/false/null literals or bare
+# truthiness (false/null drop; select paths cannot iterate; string
+# literals are verbatim), and a terminal `| length` or `| keys`
+# stage (keys sorts). Missing fields and out-of-range indexes emit
+# null and keep chaining (null indexes to null, jq-style); indexing
+# or iterating a value of the wrong type is a loud error with exit 3.
 #
 # Modes: no arguments runs the deterministic self-test (the
 # release-corpus entry), `vaisjq [-c] <filter> [file]` queries a file
@@ -502,35 +506,21 @@ fn count_cells(v: Int, base: Int, heads: List<Int>, cnexts: List<Int>) -> Int {
     cnt
 }
 
-# Parse the filter into parallel segment lists. Kinds: 0 = field
-# (payload interns the name), 1 = index (payload is the index),
-# 2 = iterate. Returns the pipe tail (0 none, 1 length, 2 keys) or
-# -1 after a loud error.
-fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, spool: List<Str>) -> Int {
-    let mut path = f
-    let mut tail = 0
-    let bar = str_index_of(f, "|")
-    if bar >= 0 {
-        path = str_slice(f, 0, bar).trim()
-        let tw = str_slice(f, bar + 1, f.len() - bar - 1).trim()
-        if tw == "length" {
-            tail = 1
-        } else if tw == "keys" {
-            tail = 2
-        } else {
-            eprint(f"error: unknown pipe tail: {tw}")
-            return 0 - 1
-        }
-    } else {
-        path = f.trim()
-    }
+# Parse one path expression (`.`, `.name` chains, `[N]`/`[-N]`
+# indexes, `[]` iteration) into the parallel segment lists. Kinds:
+# 0 = field (payload interns the name), 1 = index (payload may be
+# negative — counted from the end), 2 = iterate, 3 = select (payload
+# indexes the select tables; emitted by parse_filter, never here).
+# allow_iter 0 rejects `[]` (select inner paths stay single-valued).
+# Returns 0 ok, -1 after a loud error.
+fn parse_path_into(path: Str, seg_kind: List<Int>, seg_pay: List<Int>, spool: List<Str>, allow_iter: Int) -> Int {
     let n = path.len()
     if n == 0 {
-        eprint("error: empty filter")
+        eprint("error: empty path in filter")
         return 0 - 1
     }
     if path[0] != 46 {
-        eprint("error: filter must start with .")
+        eprint("error: filter paths must start with .")
         return 0 - 1
     }
     let mut i = 1
@@ -571,16 +561,25 @@ fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, spool: List<Str
                 return 0 - 1
             }
             if found == i + 1 {
+                if allow_iter == 0 {
+                    eprint("error: select paths cannot iterate")
+                    return 0 - 1
+                }
                 seg_kind.push(2)
                 seg_pay.push(0)
             } else {
                 let mut j = i + 1
+                let mut neg = 0
+                if path[j] == 45 {
+                    neg = 1
+                    j += 1
+                }
                 let mut idx = 0
                 let mut digs = 0
                 while j < found {
                     let d = path[j]
                     if d < 48 or d > 57 {
-                        eprint("error: only non-negative indexes are supported")
+                        eprint("error: index must be an integer")
                         return 0 - 1
                     }
                     idx = idx * 10 + (d - 48)
@@ -591,6 +590,7 @@ fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, spool: List<Str
                     eprint("error: empty index")
                     return 0 - 1
                 }
+                if neg == 1 { idx = 0 - idx }
                 seg_kind.push(1)
                 seg_pay.push(idx)
             }
@@ -614,7 +614,280 @@ fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, spool: List<Str
             }
         }
     }
+    0
+}
+
+# Split the filter on top-level pipes and parse each stage. Pure path
+# stages concatenate (`.users[] | .name` walks like `.users[].name`),
+# `select(<path> [op <literal>])` becomes a kind-3 segment whose
+# tables carry the packed op/literal-kind meta, the literal payload,
+# and the inner path span (appended to the shared segment lists after
+# the main walk so the [0, n_main) prefix stays contiguous), and a
+# final `length`/`keys` stage becomes the emission tail. Ops: 0 ==,
+# 1 !=, 2 <, 3 >, 4 <=, 5 >=, 6 bare truthiness (false/null drop).
+# Literal kinds: 0 integer, 1 verbatim string (no escapes), 2 true,
+# 3 false, 4 null. Pushes the main-walk segment count into meta_out;
+# returns the tail (0 none, 1 length, 2 keys) or -1 after a loud
+# error.
+fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<Int>, sel_lit: List<Int>, sel_span: List<Int>, spool: List<Str>, meta_out: List<Int>) -> Int {
+    let src = f.trim()
+    let n = src.len()
+    let mut tail = 0
+    let pend_paths: List<Str> = []
+    let mut i = 0
+    let mut part_start = 0
+    let mut inq = 0
+    let mut done_tail = 0
+    while i <= n {
+        let mut split = 0
+        if i == n {
+            split = 1
+        } else {
+            let c = src[i]
+            if c == 34 {
+                if inq == 1 { inq = 0 } else { inq = 1 }
+            }
+            if c == 124 {
+                if inq == 0 { split = 1 }
+            }
+        }
+        if split == 1 {
+            let part = str_slice(src, part_start, i - part_start).trim()
+            if done_tail == 1 {
+                eprint("error: length/keys must be the last pipe stage")
+                return 0 - 1
+            }
+            if part == "length" {
+                tail = 1
+                done_tail = 1
+            } else if part == "keys" {
+                tail = 2
+                done_tail = 1
+            } else if part.len() >= 8 and str_slice(part, 0, 7) == "select(" {
+                if part[part.len() - 1] != 41 {
+                    eprint("error: select is missing its closing parenthesis")
+                    return 0 - 1
+                }
+                let inner = str_slice(part, 7, part.len() - 8).trim()
+                if inner.len() == 0 {
+                    eprint("error: select needs a condition")
+                    return 0 - 1
+                }
+                # find a top-level comparison operator outside quotes
+                let mut op = 6
+                let mut opat = 0 - 1
+                let mut oplen = 0
+                let mut k = 0
+                let mut kinq = 0
+                while k < inner.len() {
+                    let b = inner[k]
+                    if b == 34 {
+                        if kinq == 1 { kinq = 0 } else { kinq = 1 }
+                    }
+                    if kinq == 0 and opat < 0 {
+                        if b == 61 and k + 1 < inner.len() {
+                            if inner[k + 1] == 61 { op = 0; opat = k; oplen = 2 }
+                        }
+                        if b == 33 and k + 1 < inner.len() {
+                            if inner[k + 1] == 61 { op = 1; opat = k; oplen = 2 }
+                        }
+                        if b == 60 {
+                            if k + 1 < inner.len() and inner[k + 1] == 61 { op = 4; opat = k; oplen = 2 }
+                            else { op = 2; opat = k; oplen = 1 }
+                        }
+                        if b == 62 {
+                            if k + 1 < inner.len() and inner[k + 1] == 61 { op = 5; opat = k; oplen = 2 }
+                            else { op = 3; opat = k; oplen = 1 }
+                        }
+                    }
+                    k += 1
+                }
+                let mut lhs = inner
+                let mut litk = 0
+                let mut litv = 0
+                if opat >= 0 {
+                    lhs = str_slice(inner, 0, opat).trim()
+                    let rhs = str_slice(inner, opat + oplen, inner.len() - opat - oplen).trim()
+                    if rhs.len() == 0 {
+                        eprint("error: select comparison needs a literal")
+                        return 0 - 1
+                    }
+                    if rhs == "true" {
+                        litk = 2
+                    } else if rhs == "false" {
+                        litk = 3
+                    } else if rhs == "null" {
+                        litk = 4
+                    } else if rhs[0] == 34 {
+                        if rhs.len() < 2 or rhs[rhs.len() - 1] != 34 {
+                            eprint("error: unterminated string literal in select")
+                            return 0 - 1
+                        }
+                        litk = 1
+                        litv = intern(str_slice(rhs, 1, rhs.len() - 2), spool)
+                    } else {
+                        let mut rj = 0
+                        let mut rneg = 0
+                        if rhs[0] == 45 {
+                            rneg = 1
+                            rj = 1
+                        }
+                        let mut racc = 0
+                        let mut rdigs = 0
+                        while rj < rhs.len() {
+                            let rd = rhs[rj]
+                            if rd < 48 or rd > 57 {
+                                eprint("error: select literals are integers, strings, true, false, or null")
+                                return 0 - 1
+                            }
+                            racc = racc * 10 + (rd - 48)
+                            rdigs += 1
+                            rj += 1
+                        }
+                        if rdigs == 0 {
+                            eprint("error: select literals are integers, strings, true, false, or null")
+                            return 0 - 1
+                        }
+                        litk = 0
+                        if rneg == 1 { racc = 0 - racc }
+                        litv = racc
+                    }
+                    if op >= 2 and litk != 0 {
+                        eprint("error: ordered select comparisons need integer literals")
+                        return 0 - 1
+                    }
+                }
+                sel_meta.push(op * 16 + litk)
+                sel_lit.push(litv)
+                pend_paths.push(lhs)
+                seg_kind.push(3)
+                seg_pay.push(sel_meta.len() - 1)
+            } else {
+                if parse_path_into(part, seg_kind, seg_pay, spool, 1) != 0 { return 0 - 1 }
+            }
+            part_start = i + 1
+        }
+        i += 1
+    }
+    let n_main = seg_kind.len()
+    let mut pj = 0
+    while pj < pend_paths.len() {
+        let span_start = seg_kind.len()
+        if parse_path_into(pend_paths[pj], seg_kind, seg_pay, spool, 0) != 0 { return 0 - 1 }
+        sel_span.push(span_start)
+        sel_span.push(seg_kind.len())
+        pj += 1
+    }
+    meta_out.push(n_main)
     tail
+}
+
+# Walk a single-valued path span (fields and indexes only) from v.
+# Missing fields and out-of-range indexes turn into null; indexing a
+# value of the wrong type is a loud error returned as the err value.
+fn walk_path(v: Int, from: Int, to: Int, seg_kind: List<Int>, seg_pay: List<Int>, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Int {
+    let mut cur = v
+    let mut si = from
+    while si < to {
+        let kind = seg_kind[si]
+        if kind == 0 {
+            if cur == null_val() { }
+            else if is_obj_val(cur) == 0 {
+                eprint("error: cannot index a non-object with a field name")
+                return err_val()
+            } else {
+                let want = spool[seg_pay[si] - str_base()]
+                let mut cell = heads[cur - obj_base()]
+                let mut found = null_val()
+                while cell >= 0 {
+                    if spool[ckeys[cell] - str_base()] == want {
+                        found = cvals[cell]
+                        cell = 0 - 1
+                    } else {
+                        cell = cnexts[cell]
+                    }
+                }
+                cur = found
+            }
+        } else {
+            if cur == null_val() { }
+            else if is_arr_val(cur) == 0 {
+                eprint("error: cannot index a non-array with a number")
+                return err_val()
+            } else {
+                let mut want2 = seg_pay[si]
+                if want2 < 0 {
+                    want2 = count_cells(cur, arr_base(), heads, cnexts) + want2
+                }
+                let mut cell2 = heads[cur - arr_base()]
+                let mut at = 0
+                let mut found2 = null_val()
+                while cell2 >= 0 {
+                    if at == want2 {
+                        found2 = cvals[cell2]
+                        cell2 = 0 - 1
+                    } else {
+                        at += 1
+                        cell2 = cnexts[cell2]
+                    }
+                }
+                cur = found2
+            }
+        }
+        si += 1
+    }
+    cur
+}
+
+# Decide whether the selected value passes the packed op/literal.
+# Returns 1 pass, 0 drop, 3 on a loud type error.
+fn select_passes(pv: Int, meta: Int, lit: Int, spool: List<Str>) -> Int {
+    let op = meta / 16
+    let litk = meta - op * 16
+    if op == 6 {
+        if pv == false_val() { return 0 }
+        if pv == null_val() { return 0 }
+        return 1
+    }
+    if op <= 1 {
+        let mut same = 0
+        if litk == 0 {
+            if is_num_val(pv) == 1 {
+                if pv == lit { same = 1 }
+            }
+        } else if litk == 1 {
+            if is_str_val(pv) == 1 {
+                if spool[pv - str_base()] == spool[lit - str_base()] { same = 1 }
+            }
+        } else if litk == 2 {
+            if pv == true_val() { same = 1 }
+        } else if litk == 3 {
+            if pv == false_val() { same = 1 }
+        } else {
+            if pv == null_val() { same = 1 }
+        }
+        if op == 0 { return same }
+        if same == 1 { return 0 }
+        return 1
+    }
+    if is_num_val(pv) == 0 {
+        eprint("error: ordered select comparisons need a number on the left")
+        return 3
+    }
+    let mut pass = 0
+    if op == 2 {
+        if pv < lit { pass = 1 }
+    }
+    if op == 3 {
+        if pv > lit { pass = 1 }
+    }
+    if op == 4 {
+        if pv <= lit { pass = 1 }
+    }
+    if op == 5 {
+        if pv >= lit { pass = 1 }
+    }
+    pass
 }
 
 # Apply the pipe tail and push the rendered result. Returns 0 ok,
@@ -679,17 +952,20 @@ fn emit_tail(v: Int, tail: Int, compact: Int, out: List<Str>, spool: List<Str>, 
     0
 }
 
-# Walk the value through filter segments starting at si, emitting one
-# output per reached leaf. Missing fields and out-of-range indexes
-# continue as null; the wrong container type is a loud error (3).
-fn eval_filter(v: Int, si: Int, seg_kind: List<Int>, seg_pay: List<Int>, tail: Int, compact: Int, out: List<Str>, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Int {
-    if si >= seg_kind.len() {
+# Walk the value through the main filter segments [si, n_main),
+# emitting one output per reached leaf. Missing fields and
+# out-of-range indexes continue as null; select segments drop values
+# that fail their condition; the wrong container type is a loud
+# error (3). Sixteen parameters — the compiler's post-extension slot
+# ceiling, locked by e397.
+fn eval_filter(v: Int, si: Int, n_main: Int, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<Int>, sel_lit: List<Int>, sel_span: List<Int>, tail: Int, compact: Int, out: List<Str>, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Int {
+    if si >= n_main {
         return emit_tail(v, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
     }
     let kind = seg_kind[si]
     if kind == 0 {
         if v == null_val() {
-            return eval_filter(null_val(), si + 1, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+            return eval_filter(null_val(), si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
         }
         if is_obj_val(v) == 0 {
             eprint("error: cannot index a non-object with a field name")
@@ -706,17 +982,20 @@ fn eval_filter(v: Int, si: Int, seg_kind: List<Int>, seg_pay: List<Int>, tail: I
                 cell = cnexts[cell]
             }
         }
-        return eval_filter(found, si + 1, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+        return eval_filter(found, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
     }
     if kind == 1 {
         if v == null_val() {
-            return eval_filter(null_val(), si + 1, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+            return eval_filter(null_val(), si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
         }
         if is_arr_val(v) == 0 {
             eprint("error: cannot index a non-array with a number")
             return 3
         }
-        let want2 = seg_pay[si]
+        let mut want2 = seg_pay[si]
+        if want2 < 0 {
+            want2 = count_cells(v, arr_base(), heads, cnexts) + want2
+        }
         let mut cell2 = heads[v - arr_base()]
         let mut at = 0
         let mut found2 = null_val()
@@ -729,7 +1008,16 @@ fn eval_filter(v: Int, si: Int, seg_kind: List<Int>, seg_pay: List<Int>, tail: I
                 cell2 = cnexts[cell2]
             }
         }
-        return eval_filter(found2, si + 1, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+        return eval_filter(found2, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
+    if kind == 3 {
+        let sj = seg_pay[si]
+        let pv = walk_path(v, sel_span[sj * 2], sel_span[sj * 2 + 1], seg_kind, seg_pay, spool, heads, ckeys, cvals, cnexts)
+        if pv == err_val() { return 3 }
+        let verdict = select_passes(pv, sel_meta[sj], sel_lit[sj], spool)
+        if verdict == 3 { return 3 }
+        if verdict == 0 { return 0 }
+        return eval_filter(v, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
     }
     let mut base = arr_base()
     if is_obj_val(v) == 1 {
@@ -742,7 +1030,7 @@ fn eval_filter(v: Int, si: Int, seg_kind: List<Int>, seg_pay: List<Int>, tail: I
     }
     let mut cell3 = heads[v - base]
     while cell3 >= 0 {
-        let st = eval_filter(cvals[cell3], si + 1, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+        let st = eval_filter(cvals[cell3], si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
         if st != 0 { return st }
         cell3 = cnexts[cell3]
     }
@@ -759,8 +1047,13 @@ fn run_query(src: Str, filter: Str, compact: Int, out: List<Str>) -> Int {
     let cnexts: List<Int> = []
     let seg_kind: List<Int> = []
     let seg_pay: List<Int> = []
-    let tail = parse_filter(filter, seg_kind, seg_pay, spool)
+    let sel_meta: List<Int> = []
+    let sel_lit: List<Int> = []
+    let sel_span: List<Int> = []
+    let meta_out: List<Int> = []
+    let tail = parse_filter(filter, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, spool, meta_out)
     if tail < 0 { return 3 }
+    let n_main = meta_out[0]
     let (v, np) = parse_json_value(src, 0, spool, heads, ckeys, cvals, cnexts)
     if v == err_val() { return 3 }
     let rest = skip_json_ws(src, np)
@@ -768,7 +1061,7 @@ fn run_query(src: Str, filter: Str, compact: Int, out: List<Str>) -> Int {
         eprint("error: trailing bytes after JSON document")
         return 3
     }
-    eval_filter(v, 0, seg_kind, seg_pay, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    eval_filter(v, 0, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
 }
 
 fn check_query(src: Str, filter: Str, compact: Int, want_status: Int, want_lines: Str) -> Int {
@@ -826,6 +1119,24 @@ fn self_test() -> Int {
     if check_query("{\"a\":1}", ".a | keys", 1, 3, "") != 1 { return 29 }
     if check_query("{\"a\":1}", "a", 1, 3, "") != 1 { return 30 }
     if check_query("{\"a\":1}", ". | nope", 1, 3, "") != 1 { return 31 }
+    # pipe stages: pure paths concatenate, tails stay terminal
+    if check_query("{\"users\":[{\"name\":\"ann\"},{\"name\":\"bo\"}]}", ".users[] | .name", 1, 0, "\"ann\"\n\"bo\"") != 1 { return 32 }
+    if check_query("{\"a\":{\"b\":[7,8]}}", ".a | .b | length", 1, 0, "2") != 1 { return 33 }
+    # select: ordered, equality, string, bare truthiness
+    if check_query("[{\"n\":1},{\"n\":5},{\"n\":9}]", ".[] | select(.n > 4) | .n", 1, 0, "5\n9") != 1 { return 34 }
+    if check_query("[{\"n\":1},{\"n\":5}]", ".[] | select(.n == 5)", 1, 0, "{\"n\":5}") != 1 { return 35 }
+    if check_query("[{\"t\":\"a\"},{\"t\":\"b\"}]", ".[] | select(.t == \"b\") | .t", 1, 0, "\"b\"") != 1 { return 36 }
+    if check_query("[{\"t\":\"a\"},{\"t\":\"b\"}]", ".[] | select(.t != \"b\") | .t", 1, 0, "\"a\"") != 1 { return 37 }
+    if check_query("[{\"ok\":true,\"n\":1},{\"ok\":false,\"n\":2},{\"n\":3}]", ".[] | select(.ok) | .n", 1, 0, "1") != 1 { return 38 }
+    # negative indexes count from the end
+    if check_query("[10,20,30]", ".[-1]", 1, 0, "30") != 1 { return 39 }
+    if check_query("[10,20,30]", ".[-4]", 1, 0, "null") != 1 { return 40 }
+    if check_query("{\"xs\":[1,2,3]}", ".xs[-2]", 1, 0, "2") != 1 { return 41 }
+    # loud select rejections: iteration inside, bad literal, type error
+    if check_query("[1]", ".[] | select(.a[] > 1)", 1, 3, "") != 1 { return 42 }
+    if check_query("[1]", ".[] | select(.a > x)", 1, 3, "") != 1 { return 43 }
+    if check_query("[{\"a\":\"s\"}]", ".[] | select(.a > 1)", 1, 3, "") != 1 { return 44 }
+    if check_query("{\"a\":1}", ". | length | .a", 1, 3, "") != 1 { return 45 }
     42
 }
 

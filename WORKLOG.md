@@ -1,5 +1,28 @@
 # Vais Worklog
 
+## 2026-08-13 (vaisjq 필터 확장 — 파이프/select/음수 인덱스)
+
+**파이프 다단**: 톱레벨 `|` 분할(따옴표 상태 추적) — 통찰: 순수 경로
+스테이지 사이의 파이프는 의미상 투명(`.users[] | .name` ≡
+`.users[].name`)이라 세그먼트 결합으로 충분, 파이프가 실제로 뜻을
+갖는 곳은 select 스테이지와 종단 length/keys뿐. 종단이 아닌
+length/keys는 LOUD 거부.
+
+**select**: kind-3 세그먼트 — 조건은 sel_meta(op*16+litk)/sel_lit
+팩킹 테이블, 내부 경로는 **공용 세그먼트 리스트의 [n_main, ...) 뒤
+스팬**으로 append(메인 워크 프리픽스 연속성 보존, 파라미터 예산
+절약). 내부 경로는 단일값 계약(반복 LOUD, walk_path 워커 분리).
+==/!=는 정수/verbatim 문자열/불리언/null, 순서 비교는 정수 전용
+(문자열에 순서 비교 = LOUD 3), bare는 jq 진리값(false/null만 드롭
+— 0은 truthy). 문자열 리터럴은 이스케이프 없는 verbatim으로 문서화.
+
+**음수 인덱스**: [-N] = count+idx, 여전히 범위 밖이면 null 체이닝.
+
+**eval_filter가 정확히 16 파라미터** — 직전 사이클의 파라미터 확장
+상한을 제품 코드가 즉시 소비(설계 시 sel_meta에 op/litk 팩킹으로
+17번째 파라미터 회피). 첫 빌드에 self-test 45케이스 전부 정답,
+컴파일러 갭 0건. 게이트 vaisjq 17케이스.
+
 ## 2026-08-12d (vaisjq — JSON 파서 + jq 부분집합, root-fix 2건 동반)
 
 **vaisjq**(e396, 15호): vaislisp 태그드-Int 패턴 재사용 — 문자열 풀 +

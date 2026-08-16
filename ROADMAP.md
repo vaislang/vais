@@ -22,7 +22,27 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-12d) — vaisjq: JSON 파서 + jq 부분집합 (15호 도구)
+## 현재 작업 (2026-08-13) — vaisjq 필터 확장: 파이프/select/음수 인덱스
+모드: 개별선택 (등록 후보 소화 — jq 실용 3종)
+- [x] 1. 다단 파이프 ✅ 2026-08-13 — 톱레벨 `|` 분할(따옴표 인지),
+      순수 경로 스테이지는 세그먼트 결합(`.a | .b` ≡ `.a.b`),
+      length/keys는 종단 전용(위반 LOUD).
+- [x] 2. select ✅ — `select(<path> [op <lit>])` kind-3 세그먼트:
+      op/리터럴-종류 팩킹(sel_meta=op*16+litk) + 내부 경로는 공용
+      세그먼트 리스트 뒤 스팬([0,n_main) 프리픽스 보존, 반복 금지
+      LOUD). ==/!=(정수/verbatim 문자열/true/false/null), 순서
+      비교(정수 전용), bare truthy(false/null 드롭). walk_path
+      단일값 워커 + select_passes 판정 분리.
+- [x] 3. 음수 인덱스 ✅ — [-N] 끝 기준(count+idx), 범위 밖 null.
+      eval_filter/walk_path 양쪽.
+- [x] 4. 잠금 ✅ — **eval_filter 정확히 16-param(직전 root-fix 상한
+      실전 도그푸드)**, 첫 빌드 정답. self-test 32~45(45케이스),
+      게이트 +5(ordered/string-eq/negative/pipe/select-iter 거부).
+- [x] 5. 문서 + 래더 ✅ — PRELUDE/README/CHANGELOG/WORKLOG, fmt/
+      workflow/test.sh 417/parity 417/release 전부 GREEN.
+진행률: 5/5 (100%)
+
+## 직전 완료 (2026-08-12d) — vaisjq: JSON 파서 + jq 부분집합 (15호 도구)
 모드: 개별선택 (파서 클래스 첫 실증 — mini-jq)
 - [x] 1. vaisjq 본체 ✅ 2026-08-12 — e396 패키지: 정수 JSON 파서(태그드
       Int — 문자열 풀 + 배열/객체 공용 (key,val,next) 셀 힙), 필터

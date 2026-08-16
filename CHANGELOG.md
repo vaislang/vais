@@ -4,6 +4,22 @@
 
 ### Added
 
+- vaisjq filter expansion: multi-stage pipes where pure path stages
+  concatenate (`.users[] | .name` walks like `.users[].name`) and
+  `length`/`keys` stay terminal-only with a loud rejection otherwise;
+  `select(<path> [op <literal>])` stages filtering the stream —
+  `==`/`!=` against integer, verbatim-string, `true`, `false`, or
+  `null` literals, ordered `<`/`>`/`<=`/`>=` against integers, and
+  bare truthiness where `false`/`null` drop (select paths are
+  single-valued: iteration inside one is a loud error); and
+  `[-N]` negative indexes counting from the end (out of range stays
+  null). The select condition compiles into packed op/literal tables
+  with its inner path appended to the shared segment lists after the
+  main walk, and eval_filter now carries exactly sixteen parameters
+  — the compiler's post-extension slot ceiling in live product use.
+  Self-test grows to 45 cases and the workflow gate adds five
+  filter-expansion cases.
+
 - vaisjq, the fifteenth installable tool: an integer JSON parser and
   jq-subset query tool built on the vaislisp tagged-Int encoding — a
   string pool plus one shared (key, val, next) cell heap serving both

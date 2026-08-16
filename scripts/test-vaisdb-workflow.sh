@@ -475,6 +475,11 @@ expect_exit "vaisjq parse error exits loud" 3 /bin/sh -c "printf '{bad' | '$jq_d
 expect_exit "vaisjq float rejects loud" 3 /bin/sh -c "printf '1.5' | '$jq_dist/bin/vaisjq' '.' >/dev/null 2>&1"
 expect_exit "vaisjq type error exits loud" 3 /bin/sh -c "printf '[1]' | '$jq_dist/bin/vaisjq' '.a' >/dev/null 2>&1"
 expect_exit "vaisjq missing file exits loud" 3 /bin/sh -c "'$jq_dist/bin/vaisjq' '.' '$tmp/vaisjq-none.json' < /dev/null >/dev/null 2>&1"
+expect_exit "vaisjq select ordered filters" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' '.users[] | select(.age > 26) | .name' '$tmp/vaisjq-t.json' | tr '\n' ' ' | grep -q '\"ann\" '"
+expect_exit "vaisjq select string equality" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' -c '.users[] | select(.name == \"bo\") | .age' '$tmp/vaisjq-t.json' | grep -qx '25'"
+expect_exit "vaisjq negative index from end" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' -c '.users[-1].name' '$tmp/vaisjq-t.json' | grep -qx '\"bo\"'"
+expect_exit "vaisjq pipe stages concatenate" 0 /bin/sh -c "printf '{\"a\":{\"b\":[1,2,3]}}' | '$jq_dist/bin/vaisjq' '.a | .b | length' | grep -qx '3'"
+expect_exit "vaisjq select iteration rejects loud" 3 /bin/sh -c "printf '[1]' | '$jq_dist/bin/vaisjq' '.[] | select(.a[] > 1)' >/dev/null 2>&1"
 
 vbox_dist="$tmp/vaisbox-dist"
 vbox_bin="$tmp/vaisbox-bin"
