@@ -138,9 +138,11 @@ vaisjq JSON query tool.
 `examples/e396_vaisjq_package` is the fifteenth installable tool: `vaisjq`
 parses integer JSON into tagged-Int values (the vaislisp encoding pattern —
 string pool, shared cell heap for arrays and objects) and runs a jq-subset
-filter: `.` identity, `.name` chains, `[N]`/`[-N]` indexes (negatives count
-from the end), `[]` iteration, multi-stage pipes (pure path stages
-concatenate), `select(<cond> [and|or <cond>]...)` stages — each condition
+filter: `.` identity, `.name` chains, `.["any key"]` quoted keys, `[N]`/
+`[-N]` indexes (negatives count from the end), `.[a:b]` slices (optional
+clamped bounds, negatives from the end, pipeline stages only), `[]`
+iteration, `any`/`all` over element truthiness, multi-stage pipes (pure
+path stages concatenate), `select(<cond> [and|or <cond>]...)` stages — each condition
 is `<path> [op <literal>]` with `==`/`!=` against integer, verbatim-string,
 `true`, `false`, or `null` literals, ordered `<`/`>`/`<=`/`>=` against
 integers, or bare truthiness where `false`/`null` drop, with `and` binding

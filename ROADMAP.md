@@ -22,7 +22,22 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-17b) — vaisjq 6라운드: group_by/entries/reverse
+## 현재 작업 (2026-08-17c) — vaisjq 7라운드: 따옴표 키/슬라이스/any·all
+모드: 개별선택 (등록 후보 소화 — 경로·술어 마감)
+- [x] 1. .["any key"] ✅ 2026-08-17 — 따옴표 키 세그먼트(verbatim,
+      비식별자 필드, kind 0 재사용 — walk_path 자동 호환).
+- [x] 2. .[a:b] 슬라이스 ✅ — 바운드 생략·음수(끝 기준)·클램프,
+      null 통과, **페어 세그먼트(kind 18+19, 센티널 1000000)**로
+      테이블 증설 없음. 내부 경로(select/map/템플릿)에서는 LOUD.
+- [x] 3. any/all ✅ — 원소 truthiness(false/null만 falsy), 빈 배열
+      any=false/all=true(공허 참). kind 20·21.
+- [x] 4. 잠금 ✅ — 첫 빌드 정답. self-test 111~127(127케이스), 게이트
+      +5(따옴표 키/슬라이스 클램프/reverse 체인/map|all/비배열 LOUD).
+- [x] 5. 문서 + 래더 ✅ — fmt/workflow/test.sh 417/parity 417/
+      release 전부 GREEN.
+진행률: 5/5 (100%)
+
+## 직전 완료 (2026-08-17b) — vaisjq 6라운드: group_by/entries/reverse
 모드: 개별선택 (등록 후보 소화 — 그룹화·엔트리 변환)
 - [x] 1. group_by ✅ 2026-08-17 — 키 워크(수/문자열 동종, null·불리언
       ·혼합 LOUD) 후 **병렬 키/원소 리스트 수제 안정 삽입 정렬**(jq

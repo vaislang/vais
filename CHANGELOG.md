@@ -4,6 +4,18 @@
 
 ### Added
 
+- vaisjq round 7, paths and predicates: `.["any key"]` quoted-key
+  segments reach non-identifier fields (verbatim content, chains
+  like `.x["k-1"]`), `.[a:b]` array slices with optional bounds that
+  clamp — negatives count from the end, null passes through, and
+  slices live in pipeline stages only (select/map/template inner
+  paths reject them loudly) — and `any`/`all` reduce arrays by
+  element truthiness (false/null falsy) with the vacuous empties
+  any=false, all=true. Slices encode as a paired segment (start plus
+  end bound) so no new tables appear and eval_filter keeps its
+  sixteen parameters. Self-test grows to 127 cases and the workflow
+  gate adds five round-7 cases.
+
 - vaisjq round 6, grouping and entries: `group_by(<path>)`
   stable-sorts array elements by their key walk (homogeneous number
   or string keys; null, boolean, container, or mixed keys are loud)

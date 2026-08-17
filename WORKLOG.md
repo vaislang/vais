@@ -1,5 +1,20 @@
 # Vais Worklog
 
+## 2026-08-17c (vaisjq 7라운드 — 따옴표 키/슬라이스/any·all)
+
+**따옴표 키**: `[` 뒤 34면 quote-scan 후 `]` 요구 — kind 0 필드
+세그먼트로 떨어져 walk_path(select/map/템플릿 내부 경로)가 공짜로
+호환. 키 안 `]`도 안전(quote-scan이 우선). **슬라이스**: 콜론 검출
+시 페어 세그먼트(kind 18=시작, 19=끝, 결측=센티널 1000000) — 평가기
+가 si+2로 소비, sel_* 테이블 증설 없음. 바운드는 음수(끝 기준)→
+클램프→a>b면 빈 배열, null은 통과(jq). 내부 경로에서는 "slices
+need a full pipeline stage" LOUD(walk_path에 슬라이스 미탑재 스코프
+컷 명시). **any/all**: false/null만 falsy, 빈 배열은 공허 참/거짓,
+단락 순회. `.users | map(.ok) | all` 합성이 사용례.
+
+첫 빌드 127케이스 전부 정답, 컴파일러 무변경, eval_filter 16-param
+불변. 게이트 vaisjq 46케이스.
+
 ## 2026-08-17b (vaisjq 6라운드 — group_by/to_entries/from_entries/reverse)
 
 **group_by**(kind 14): 원소별 키 워크 수집(수/문자열 동종 강제 —
