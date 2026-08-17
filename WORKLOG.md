@@ -1,5 +1,20 @@
 # Vais Worklog
 
+## 2026-08-17 (v1.4.0 릴리스 컷)
+
+v1.3.0 이후 14커밋 회전 고정. 내용: **vaislisp 완결**(문자열/cons/
+일급 lambda 태그드 값 + let·quote·str-ref/byte + cond·and·or·else-
+옵션 if + .lisp 코퍼스 6본 도그푸딩 + vaisbox 14번째 applet), 한줄
+fn 본문 표면 결정(평탄 지원+불가형 front 거부), **vaisjq 아크
+6사이클**(15호 도구·vaisbox 15번째 — 정수 JSON 파서, 파이프/select
+다중조건/map/has/first·last/add·join·min·max/sort·unique/객체
+생성/문자열 템플릿 — self-test 95케이스·게이트 36케이스),
+**컴파일러 root-fix 3건**(파라미터 10→16 확장+front 17+ 거부/단항
+마이너스 silent-0 해소/한줄 fn 빈 IR 갭 — parity 414→417).
+
+컷 자체는 버전 문자열(1.4.0)/CHANGELOG 로테이션/로드맵·워크로그
+노트만. 드라이버 재빌드 수반이라 전체 래더로 검증.
+
 ## 2026-08-13e (vaisjq 5라운드 — 문자열 보간 템플릿)
 
 따옴표로 시작하는 파이프 스테이지 = 템플릿(kind 13). 파스: 리터럴

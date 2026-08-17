@@ -22,7 +22,22 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-13e) — vaisjq 5라운드: 문자열 보간 템플릿
+## 현재 작업 (2026-08-17) — v1.4.0 릴리스 컷
+모드: 개별선택 (프로그램형 아크 2종 완결 후 회전 고정)
+- [x] 1. 컷 ✅ 2026-08-17 — v1.3.0 이후 14커밋 회전: vaislisp 완결
+      (태그드 값 표면 2~4라운드 + .lisp 코퍼스 6본 + vaisbox 14호),
+      한줄 fn 본문 표면 결정, **vaisjq 아크 6사이클**(15호 도구,
+      vaisbox 15번째 applet — 파서→파이프·select→map·has→집계→
+      정렬·재구성→보간), **컴파일러 root-fix 3건**(파라미터 10→16/
+      단항 마이너스 silent-0/한줄 fn 갭 — parity 414→417). 버전
+      문자열/CHANGELOG 로테이션/로드맵 노트만, 전체 래더+release
+      GREEN.
+- [x] 2. 래더 + 태그 ✅ — fmt/front/direct/fixpoint-full/test.sh
+      417/parity 417/self-host/release 전부 GREEN, vaisc 1.4.0 확인,
+      v1.4.0 태그 푸시.
+진행률: 2/2 (100%)
+
+## 직전 완료 (2026-08-13e) — vaisjq 5라운드: 문자열 보간 템플릿
 모드: 개별선택 (사용자 지시 — 5라운드까지 연속 진행 중 2/2)
 - [x] 1. 템플릿 스테이지 ✅ 2026-08-13 — 따옴표 스테이지(kind 13):
       \(...) 홀=단일값 경로(반복 LOUD), 홀 문자열 raw/그 외 compact

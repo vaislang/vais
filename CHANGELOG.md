@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.4.0 - 2026-08-17
+
 ### Added
 
 - vaisjq round 5, string templates: a quoted pipe stage
