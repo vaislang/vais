@@ -22,7 +22,23 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-17) — v1.4.0 릴리스 컷
+## 현재 작업 (2026-08-17b) — vaisjq 6라운드: group_by/entries/reverse
+모드: 개별선택 (등록 후보 소화 — 그룹화·엔트리 변환)
+- [x] 1. group_by ✅ 2026-08-17 — 키 워크(수/문자열 동종, null·불리언
+      ·혼합 LOUD) 후 **병렬 키/원소 리스트 수제 안정 삽입 정렬**(jq
+      동일-키 입력 순서 보존), 동일-키 런을 중첩 배열로. kind 14,
+      경로 atom(op 11) 재사용, str_less 바이트 비교 헬퍼.
+- [x] 2. to_entries/from_entries/reverse ✅ — 객체↔{key,value} 배열
+      (결측 value null/비문자열·결측 key LOUD/중복 last-wins,
+      roundtrip 잠금), reverse(배열 전용). kind 15~17. eval_filter
+      16-param 불변.
+- [x] 3. 잠금 ✅ — 첫 빌드 정답. self-test 96~110(110케이스), 게이트
+      +5(그룹 런/length 합성/roundtrip/sort|reverse/혼합 키 LOUD).
+- [x] 4. 문서 + 래더 ✅ — fmt/workflow/test.sh 417/parity 417/
+      release 전부 GREEN.
+진행률: 4/4 (100%)
+
+## 직전 완료 (2026-08-17) — v1.4.0 릴리스 컷
 모드: 개별선택 (프로그램형 아크 2종 완결 후 회전 고정)
 - [x] 1. 컷 ✅ 2026-08-17 — v1.3.0 이후 14커밋 회전: vaislisp 완결
       (태그드 값 표면 2~4라운드 + .lisp 코퍼스 6본 + vaisbox 14호),

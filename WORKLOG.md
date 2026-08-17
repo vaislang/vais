@@ -1,5 +1,23 @@
 # Vais Worklog
 
+## 2026-08-17b (vaisjq 6라운드 — group_by/to_entries/from_entries/reverse)
+
+**group_by**(kind 14): 원소별 키 워크 수집(수/문자열 동종 강제 —
+null·불리언·컨테이너·혼합 전부 LOUD) 후 **병렬 리스트(keyn/keys2/
+elems) 수제 안정 삽입 정렬** — 내장 .sort()는 페이로드를 못 나르고
+List<Str>는 사전순 비교가 없어 str_less(바이트 비교)를 직접. 동일-키
+는 strict-greater만 시프트라 입력 순서 보존(jq 안정성 계약, 케이스
+97 잠금). 정렬 후 동일-키 런을 내부 배열로, 전체를 외부 배열로.
+**to_entries/from_entries**(kind 15·16): 객체↔{key,value} 배열 —
+from은 key 필수(문자열, 아니면 LOUD)/value 결측 null/중복 last-wins
+(객체 생성과 동일 규약). roundtrip(to|from) 항등 잠금.
+**reverse**(kind 17): 수집 후 역순 재구축 — `sort | reverse`가
+내림차순 관용.
+
+첫 빌드 110케이스 전부 정답, 컴파일러 무변경, eval_filter 16-param
+불변. 게이트 vaisjq 41케이스. `.logs | group_by(.lvl) | .[] | first
+| "\(.lvl): \(.msg)"` 같은 로그 요약 파이프라인이 실사용례.
+
 ## 2026-08-17 (v1.4.0 릴리스 컷)
 
 v1.3.0 이후 14커밋 회전 고정. 내용: **vaislisp 완결**(문자열/cons/

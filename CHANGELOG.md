@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- vaisjq round 6, grouping and entries: `group_by(<path>)`
+  stable-sorts array elements by their key walk (homogeneous number
+  or string keys; null, boolean, container, or mixed keys are loud)
+  and wraps each equal-key run in its own nested array — a
+  hand-written stable insertion sort over parallel key/element lists
+  keeps jq's input-order guarantee for equal keys; `to_entries`
+  turns an object into an array of `{key, value}` objects and
+  `from_entries` inverts it (missing values null, missing or
+  non-string keys loud, later duplicates overwrite), so
+  `to_entries | from_entries` round-trips; and `reverse` flips
+  arrays, composing with sort for descending order. Self-test grows
+  to 110 cases and the workflow gate adds five round-6 cases.
+
 ## v1.4.0 - 2026-08-17
 
 ### Added

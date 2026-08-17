@@ -499,6 +499,11 @@ expect_exit "vaisjq template interpolates per value" 0 /bin/sh -c "'$jq_dist/bin
 expect_exit "vaisjq template renders containers compact" 0 /bin/sh -c "printf '{\"a\":[1,2]}' | '$jq_dist/bin/vaisjq' '. | \"xs=\\(.a)\"' | grep -qx '\"xs=\[1,2\]\"'"
 expect_exit "vaisjq template composes with select" 0 /bin/sh -c "'$jq_dist/bin/vaisjq' '.users[] | select(.age > 26) | \"senior: \\(.name)\"' '$tmp/vaisjq-t.json' | grep -qx '\"senior: ann\"'"
 expect_exit "vaisjq template iteration hole rejects loud" 3 /bin/sh -c "printf '{\"a\":1}' | '$jq_dist/bin/vaisjq' '. | \"\\(.a[]) x\"' >/dev/null 2>&1"
+expect_exit "vaisjq group_by wraps equal-key runs" 0 /bin/sh -c "printf '[{\"t\":\"b\"},{\"t\":\"a\"},{\"t\":\"a\"}]' | '$jq_dist/bin/vaisjq' -c '. | group_by(.t)' | grep -qx '\[\[{\"t\":\"a\"},{\"t\":\"a\"}\],\[{\"t\":\"b\"}\]\]'"
+expect_exit "vaisjq group_by composes with length" 0 /bin/sh -c "printf '[{\"t\":\"a\"},{\"t\":\"b\"},{\"t\":\"a\"}]' | '$jq_dist/bin/vaisjq' '. | group_by(.t) | .[] | length' | tr '\n' ' ' | grep -q '2 1 '"
+expect_exit "vaisjq entries roundtrip" 0 /bin/sh -c "printf '{\"a\":1,\"b\":2}' | '$jq_dist/bin/vaisjq' -c '. | to_entries | from_entries' | grep -qx '{\"a\":1,\"b\":2}'"
+expect_exit "vaisjq reverse flips arrays" 0 /bin/sh -c "printf '[1,2,3]' | '$jq_dist/bin/vaisjq' -c '. | sort | reverse' | grep -qx '\[3,2,1\]'"
+expect_exit "vaisjq group_by mixed keys rejects loud" 3 /bin/sh -c "printf '[{\"t\":1},{\"t\":\"a\"}]' | '$jq_dist/bin/vaisjq' '. | group_by(.t)' >/dev/null 2>&1"
 
 vbox_dist="$tmp/vaisbox-dist"
 vbox_bin="$tmp/vaisbox-bin"
