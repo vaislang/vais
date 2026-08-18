@@ -1,5 +1,24 @@
 # Vais Worklog
 
+## 2026-08-18 (vaisjq 8라운드 — 경로 비교/not/객체 템플릿 값)
+
+**경로 간 비교**: RHS가 `.`로 시작하면 **passive atom(op 15 = meta
+240 < 플래그 256)**에 RHS 경로 스팬을 싣고 owner atom이 litk 5 +
+sel_lit=슬롯 인덱스로 참조 — 그룹 순회는 op 15를 무평가 스킵(3라운드
+의 플래그 충돌 교훈대로 팩킹 전 상한 확인: op≤15 → meta≤245 < 256).
+==/!=는 value_eq **깊은 동등** — 수/불리언/null 동일성, 문자열 내용,
+배열 원소순, **객체는 키셋 기준(엔트리 순서 무관, 카운트 선비교)**.
+순서 비교는 양측 수 필수 LOUD. **not**(kind 22): false/null→true,
+그 외→false — `map(.ok) | all | not` 체인. **객체 템플릿 값**:
+5라운드 인라인 템플릿 파스를 parse_template로, kind-13 eval을
+render_template로 추출해 객체 생성과 공유. 엔트리 atom op 13은
+sel_lit=kidx*1e8+pack 팩킹(kidx<1e5·pack<1.7e7 가드) — parse가
+템플릿 홀 atom들을 엔트리 스팬 사이에 끼워 넣으므로 **eval 루프가
+op 9/13만 엔트리로 취급하고 나머지는 스킵**.
+
+첫 빌드 142케이스 전부 정답, 컴파일러 무변경, eval_filter 16-param
+불변. 게이트 vaisjq 51케이스.
+
 ## 2026-08-17c (vaisjq 7라운드 — 따옴표 키/슬라이스/any·all)
 
 **따옴표 키**: `[` 뒤 34면 quote-scan 후 `]` 요구 — kind 0 필드

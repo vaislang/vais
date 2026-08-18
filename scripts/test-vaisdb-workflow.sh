@@ -509,6 +509,11 @@ expect_exit "vaisjq slices clamp and count from end" 0 /bin/sh -c "printf '[10,2
 expect_exit "vaisjq slice chains with reverse" 0 /bin/sh -c "printf '{\"logs\":[1,2,3,4,5]}' | '$jq_dist/bin/vaisjq' -c '.logs[1:4] | reverse' | grep -qx '\[4,3,2\]'"
 expect_exit "vaisjq any all compose with map" 0 /bin/sh -c "printf '{\"users\":[{\"ok\":true},{\"ok\":false}]}' | '$jq_dist/bin/vaisjq' '.users | map(.ok) | all' | grep -qx 'false'"
 expect_exit "vaisjq slice on non-array rejects loud" 3 /bin/sh -c "printf '{\"a\":1}' | '$jq_dist/bin/vaisjq' '.[1:2]' >/dev/null 2>&1"
+expect_exit "vaisjq select compares two paths" 0 /bin/sh -c "printf '[{\"a\":1,\"b\":1},{\"a\":1,\"b\":2}]' | '$jq_dist/bin/vaisjq' '.[] | select(.a == .b) | .b' | grep -qx '1'"
+expect_exit "vaisjq deep object equality ignores order" 0 /bin/sh -c "printf '[{\"a\":{\"x\":1,\"y\":2},\"b\":{\"y\":2,\"x\":1}}]' | '$jq_dist/bin/vaisjq' '.[] | select(.a == .b) | . | length' | grep -qx '2'"
+expect_exit "vaisjq not negates a reduce chain" 0 /bin/sh -c "printf '[{\"ok\":true},{\"ok\":false}]' | '$jq_dist/bin/vaisjq' '. | map(.ok) | all | not' | grep -qx 'true'"
+expect_exit "vaisjq object template values interpolate" 0 /bin/sh -c "printf '{\"name\":\"ann\",\"age\":30}' | '$jq_dist/bin/vaisjq' -c '. | {who: .name, msg: \"\\(.name) is \\(.age)\"}' | grep -qx '{\"who\":\"ann\",\"msg\":\"ann is 30\"}'"
+expect_exit "vaisjq ordered path compare rejects mixed" 3 /bin/sh -c "printf '[{\"a\":\"s\",\"b\":1}]' | '$jq_dist/bin/vaisjq' '.[] | select(.a < .b)' >/dev/null 2>&1"
 
 vbox_dist="$tmp/vaisbox-dist"
 vbox_bin="$tmp/vaisbox-bin"

@@ -143,17 +143,20 @@ filter: `.` identity, `.name` chains, `.["any key"]` quoted keys, `[N]`/
 clamped bounds, negatives from the end, pipeline stages only), `[]`
 iteration, `any`/`all` over element truthiness, multi-stage pipes (pure
 path stages concatenate), `select(<cond> [and|or <cond>]...)` stages — each condition
-is `<path> [op <literal>]` with `==`/`!=` against integer, verbatim-string,
-`true`, `false`, or `null` literals, ordered `<`/`>`/`<=`/`>=` against
-integers, or bare truthiness where `false`/`null` drop, with `and` binding
-tighter than `or` and left-to-right short-circuit, and a `has(...)` atom
-testing the piped value — `map(<path>)` building a new array from each
+is `<path> [op <literal or path>]` with `==`/`!=` against integer,
+verbatim-string, `true`, `false`, or `null` literals or another path
+(deep equality, objects regardless of entry order), ordered
+`<`/`>`/`<=`/`>=` against integers (both sides numbers for path pairs), or
+bare truthiness where `false`/`null` drop, with `and` binding tighter than
+`or` and left-to-right short-circuit, and a `has(...)` atom testing the
+piped value — `not` negating truthiness, `map(<path>)` building a new array from each
 element's single-valued walk, `has("key")`/`has(N)` emitting true/false,
 `first`/`last` as index sugar, `add` (number sums inside the integer band
 or string concatenation; empty is null), `join("sep")` (strings verbatim,
 numbers stringified, null empty), `min`/`max` (numbers only, empty null),
 `sort`/`unique` over homogeneous number or string arrays, object
-construction `{key: <path>, "quoted": <path>, shorthand}` with later
+construction `{key: <path or "template">, "quoted": <path>, shorthand}`
+with template values interpolating against the piped value and later
 duplicate keys overwriting, string templates `"text \(.path) more"` whose
 holes render strings raw and other values as compact JSON,
 `group_by(<path>)` stable-sorting by homogeneous number or string keys and

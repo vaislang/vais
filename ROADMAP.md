@@ -22,7 +22,25 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-17c) — vaisjq 7라운드: 따옴표 키/슬라이스/any·all
+## 현재 작업 (2026-08-18) — vaisjq 8라운드: 경로 비교/not/객체 템플릿
+모드: 개별선택 (등록 후보 소화 — 비교·합성 마감)
+- [x] 1. 경로 간 비교 ✅ 2026-08-18 — select RHS가 경로면 **passive
+      atom(op 15)**에 스팬을 싣고 owner는 litk 5로 참조(그룹 기계
+      무변경). ==/!=는 **value_eq 깊은 동등**(배열 원소순, 객체
+      키셋 — 엔트리 순서 무관), 순서 비교는 양측 수 필수 LOUD.
+- [x] 2. not ✅ — truthiness 부정 스테이지(kind 22),
+      `map(.ok) | all | not` 리듀스 체인 합성.
+- [x] 3. 객체 템플릿 값 ✅ — `{msg: "\(.name) ok"}`: parse_template/
+      render_template 헬퍼 추출(스테이지·객체 생성 공유), 엔트리
+      atom op 13(sel_lit=kidx*1e8+pack, 상한 가드 — 팩킹 전 필드
+      상한 표). eval 루프는 op 9/13만 엔트리로, 템플릿 홀 atom 스킵.
+- [x] 4. 잠금 ✅ — 첫 빌드 정답. self-test 128~142(142케이스), 게이트
+      +5(경로 eq/깊은 obj eq/not 체인/객체 템플릿/혼합 순서 LOUD).
+- [x] 5. 문서 + 래더 ✅ — fmt/workflow/test.sh 417/parity 417/
+      release 전부 GREEN.
+진행률: 5/5 (100%)
+
+## 직전 완료 (2026-08-17c) — vaisjq 7라운드: 따옴표 키/슬라이스/any·all
 모드: 개별선택 (등록 후보 소화 — 경로·술어 마감)
 - [x] 1. .["any key"] ✅ 2026-08-17 — 따옴표 키 세그먼트(verbatim,
       비식별자 필드, kind 0 재사용 — walk_path 자동 호환).

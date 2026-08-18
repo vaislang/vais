@@ -4,6 +4,17 @@
 
 ### Added
 
+- vaisjq round 8, comparisons and composition: select conditions
+  accept a path on the right-hand side (`select(.a == .b)`) — `==`
+  and `!=` compare deeply (arrays elementwise, objects by key set
+  regardless of entry order) while ordered comparisons need numbers
+  on both sides; the RHS path rides a passive atom slot so the group
+  machinery is untouched. `not` negates truthiness as a stage,
+  composing with reduce chains (`map(.ok) | all | not`). Object
+  construction accepts template values (`{msg: "\(.name) ok"}`),
+  reusing the template parser and renderer. Self-test grows to 142
+  cases and the workflow gate adds five round-8 cases.
+
 - vaisjq round 7, paths and predicates: `.["any key"]` quoted-key
   segments reach non-identifier fields (verbatim content, chains
   like `.x["k-1"]`), `.[a:b]` array slices with optional bounds that
