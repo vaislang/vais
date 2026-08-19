@@ -29,7 +29,13 @@ This file tracks current work and completed gate-backed language surface.
       distinct 수 비례). 원래 트랩 부하(15000 intern→3슬롯) + 5000
       distinct(num->str — 오버플로 파티션 실사용) + 5000 cons 강화
       스트레스 0.06s exit 42 게이트 교체.
-- [ ] 2. vaisjq 10라운드 (recurse/paths — 수집 프리패스로 16-param 유지)
+- [x] 2. vaisjq 10라운드 ✅ — recurse(프리오더 자기+전 하위값,
+      collect_values 프리패스 5-param)/paths(하위값별 경로 배열 —
+      키=문자열·인덱스=숫자·루트 제외, path_extend 복사+append,
+      collect_paths 8-param) — eval_filter 16-param 불변, 수집
+      리스트 4095 계약은 LOUD 트랩. self-test 161/게이트 vaisjq
+      58케이스. 트랩: recurse|select(has(...))는 스칼라에 LOUD가
+      계약(jq 동일 — 게이트 케이스를 == 비교로).
 - [ ] 3. v1.5.0 컷
 진행률: 1/3
 

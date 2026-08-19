@@ -523,6 +523,9 @@ expect_exit "vaisjq arithmetic adds two paths" 0 /bin/sh -c "printf '{\"a\":40,\
 expect_exit "vaisjq arithmetic averages a pipeline" 0 /bin/sh -c "printf '{\"xs\":[10,20,30]}' | '$jq_dist/bin/vaisjq' '.xs | add | . / 3' | grep -qx '20'"
 expect_exit "vaisjq tostring tonumber roundtrip" 0 /bin/sh -c "printf '{\"n\":\"21\"}' | '$jq_dist/bin/vaisjq' '.n | tonumber | . * 2' | grep -qx '42'"
 expect_exit "vaisjq division by zero rejects loud" 3 /bin/sh -c "printf '{\"a\":1}' | '$jq_dist/bin/vaisjq' '.a / 0' >/dev/null 2>&1"
+expect_exit "vaisjq recurse emits every subvalue" 0 /bin/sh -c "printf '{\"a\":{\"b\":1}}' | '$jq_dist/bin/vaisjq' -c '. | recurse' | tr '\n' ' ' | grep -q '{\"a\":{\"b\":1}} {\"b\":1} 1 '"
+expect_exit "vaisjq recurse composes with select" 0 /bin/sh -c "printf '{\"users\":[{\"n\":5},{\"n\":9}]}' | '$jq_dist/bin/vaisjq' '. | recurse | select(. == 9)' | grep -qx '9'"
+expect_exit "vaisjq paths lists key and index trails" 0 /bin/sh -c "printf '{\"a\":{\"b\":1},\"c\":[2]}' | '$jq_dist/bin/vaisjq' -c '. | paths' | tr '\n' ' ' | grep -q '\[\"a\"\] \[\"a\",\"b\"\] \[\"c\"\] \[\"c\",0\] '"
 
 vbox_dist="$tmp/vaisbox-dist"
 vbox_bin="$tmp/vaisbox-bin"

@@ -1,5 +1,22 @@
 # Vais Worklog
 
+## 2026-08-20b (vaisjq 10라운드 — recurse/paths)
+
+**recurse**(kind 26): collect_values 프리패스(5-param — v 자신 push
+후 컨테이너 자식 재귀)로 프리오더 수집 → 루프에서 각 값이 잔여
+파이프라인 계속. **paths**(kind 27): collect_paths(8-param) —
+부모 경로 배열을 path_extend(셀 복사+원소 추가)로 확장하며 자식별
+경로 배열 축적(객체 키=STR, 배열 인덱스=수, 루트 빈 경로 제외 —
+jq paths 동일). 수집 리스트는 4095 계약 — 초과 문서 LOUD.
+16-param 상한 회피 설계: 방출 재귀를 eval_filter에 직접 넣지 않고
+**수집 프리패스 + 방출 루프** 2단으로.
+
+프로브 교훈 2건: `recurse | select(has(...))`는 스칼라 도달 시
+has의 비객체 LOUD가 **계약대로**(jq도 `..|objects|` 가드가 관용) —
+게이트는 `select(. == 9)`로; `paths | length | ...`는 length 종단
+전용 규칙에 걸리는 게 정상. 첫 빌드 161케이스 정답, 게이트 vaisjq
+58케이스.
+
 ## 2026-08-20 (vaislisp 풀 dedup — 핫루프 재-intern 근본 해소)
 
 설계 선택: 토큰-위치 리터럴 캐시(리터럴만 해결, eval_at 파라미터

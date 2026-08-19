@@ -4,6 +4,16 @@
 
 ### Added
 
+- vaisjq round 10, deep traversal: `recurse` emits a value and every
+  nested subvalue in preorder, each continuing the remaining
+  pipeline (`. | recurse | select(. == 9)`), and `paths` emits one
+  path array per subvalue — object keys as strings, array indexes as
+  numbers, the root's empty path excluded, jq-style. Both collect
+  through a pre-pass into a working list (the 4095-slot contract
+  bounds one traversal, loudly), keeping eval_filter at sixteen
+  parameters. Self-test grows to 161 cases and the workflow gate
+  adds three round-10 cases.
+
 - vaislisp string-pool dedup: pool_put now returns the existing slot
   when the content is already interned, so literals and computed
   strings re-evaluated inside hot loops reuse one entry instead of

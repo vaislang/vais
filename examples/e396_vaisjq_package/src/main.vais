@@ -24,7 +24,10 @@
 # (single space-delimited + - * / per stage; numbers only, division
 # by zero and band overflow are loud), `tostring` (strings pass,
 # everything else renders compact) and `tonumber` (integer strings
-# parse, others are loud), `not` negating truthiness,
+# parse, others are loud), `recurse` emitting a value and every
+# nested subvalue in preorder, `paths` emitting one path array per
+# subvalue (object keys as strings, array indexes as numbers, root
+# excluded), `not` negating truthiness,
 # `select(<cond> [and|or <cond>]...)` stages — each condition is
 # `<path> [op <literal or path>]` with == != < > <= >= against
 # integer/string/true/false/null literals or another path (== and !=
@@ -1220,6 +1223,12 @@ fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<
             } else if part == "not" {
                 seg_kind.push(22)
                 seg_pay.push(0)
+            } else if part == "recurse" {
+                seg_kind.push(26)
+                seg_pay.push(0)
+            } else if part == "paths" {
+                seg_kind.push(27)
+                seg_pay.push(0)
             } else if part == "tostring" {
                 seg_kind.push(24)
                 seg_pay.push(0)
@@ -1694,6 +1703,69 @@ fn render_template(v: Int, tpay: Int, seg_kind: List<Int>, seg_pay: List<Int>, s
         ta += 1
     }
     intern(str_builder_finish(rb), spool)
+}
+
+# Collect v and every nested value in preorder for recurse. The
+# accumulator shares the 4095-slot list contract, so a document with
+# more subvalues traps loudly.
+fn collect_values(v: Int, acc: List<Int>, heads: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Int {
+    acc.push(v)
+    let mut base = 0 - 1
+    if is_arr_val(v) == 1 { base = arr_base() }
+    if is_obj_val(v) == 1 { base = obj_base() }
+    if base < 0 { return 0 }
+    let mut cell = heads[v - base]
+    while cell >= 0 {
+        let walked = collect_values(cvals[cell], acc, heads, cvals, cnexts)
+        cell = cnexts[cell]
+    }
+    0
+}
+
+# Copy the base path array and append one element, returning the new
+# array value.
+fn path_extend(base: Int, elem: Int, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Int {
+    heads.push(0 - 1)
+    let hidx = heads.len() - 1
+    let mut prev = 0 - 1
+    let mut cell = heads[base - arr_base()]
+    while cell >= 0 {
+        ckeys.push(0 - 1)
+        cvals.push(cvals[cell])
+        cnexts.push(0 - 1)
+        let nc = cvals.len() - 1
+        if prev < 0 { heads[hidx] = nc } else { cnexts[prev] = nc }
+        prev = nc
+        cell = cnexts[cell]
+    }
+    ckeys.push(0 - 1)
+    cvals.push(elem)
+    cnexts.push(0 - 1)
+    let lastc = cvals.len() - 1
+    if prev < 0 { heads[hidx] = lastc } else { cnexts[prev] = lastc }
+    arr_base() + hidx
+}
+
+# Collect the path array of every subvalue below v in preorder
+# (object keys as strings, array indexes as numbers); the root's
+# empty path is not emitted, matching jq's paths.
+fn collect_paths(v: Int, base: Int, acc: List<Int>, spool: List<Str>, heads: List<Int>, ckeys: List<Int>, cvals: List<Int>, cnexts: List<Int>) -> Int {
+    let mut cbase = 0 - 1
+    if is_arr_val(v) == 1 { cbase = arr_base() }
+    if is_obj_val(v) == 1 { cbase = obj_base() }
+    if cbase < 0 { return 0 }
+    let mut cell = heads[v - cbase]
+    let mut at = 0
+    while cell >= 0 {
+        let mut elem = at
+        if cbase == obj_base() { elem = ckeys[cell] }
+        let child_path = path_extend(base, elem, heads, ckeys, cvals, cnexts)
+        acc.push(child_path)
+        let sub = collect_paths(cvals[cell], child_path, acc, spool, heads, ckeys, cvals, cnexts)
+        at += 1
+        cell = cnexts[cell]
+    }
+    0
 }
 
 # Decide whether the selected value passes the packed op/literal.
@@ -2506,6 +2578,33 @@ fn eval_filter(v: Int, si: Int, n_main: Int, seg_kind: List<Int>, seg_pay: List<
         }
         return eval_filter(ares, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
     }
+    if kind == 26 {
+        # recurse: emit v and every nested value in preorder, each
+        # continuing the remaining pipeline.
+        let racc: List<Int> = []
+        let collected = collect_values(v, racc, heads, cvals, cnexts)
+        let mut ri2 = 0
+        while ri2 < racc.len() {
+            let st2 = eval_filter(racc[ri2], si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+            if st2 != 0 { return st2 }
+            ri2 += 1
+        }
+        return 0
+    }
+    if kind == 27 {
+        # paths: emit one path array per subvalue (root excluded).
+        heads.push(0 - 1)
+        let empty_path = arr_base() + heads.len() - 1
+        let pacc: List<Int> = []
+        let collected2 = collect_paths(v, empty_path, pacc, spool, heads, ckeys, cvals, cnexts)
+        let mut pi2 = 0
+        while pi2 < pacc.len() {
+            let st3 = eval_filter(pacc[pi2], si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+            if st3 != 0 { return st3 }
+            pi2 += 1
+        }
+        return 0
+    }
     if kind == 24 {
         # tostring: strings pass through, everything else renders as
         # compact JSON.
@@ -2822,6 +2921,15 @@ fn self_test() -> Int {
     if check_query("\"42\"", ". | tonumber", 1, 0, "42") != 1 { return 152 }
     if check_query("\"x1\"", ". | tonumber", 1, 3, "") != 1 { return 153 }
     if check_query("{\"n\":\"21\"}", ".n | tonumber | . * 2", 1, 0, "42") != 1 { return 154 }
+    # recurse: preorder self plus descendants, composing with select
+    if check_query("{\"a\":{\"b\":1}}", ". | recurse", 1, 0, "{\"a\":{\"b\":1}}\n{\"b\":1}\n1") != 1 { return 155 }
+    if check_query("7", ". | recurse", 1, 0, "7") != 1 { return 156 }
+    if check_query("[1,[2,3]]", ". | recurse | select(. == 3)", 1, 0, "3") != 1 { return 157 }
+    # paths: object keys as strings, array indexes as numbers
+    if check_query("{\"a\":{\"b\":1},\"c\":2}", ". | paths", 1, 0, "[\"a\"]\n[\"a\",\"b\"]\n[\"c\"]") != 1 { return 158 }
+    if check_query("[10,[20]]", ". | paths", 1, 0, "[0]\n[1]\n[1,0]") != 1 { return 159 }
+    if check_query("5", ". | paths", 1, 0, "") != 1 { return 160 }
+    if check_query("{\"a\":{\"b\":1}}", ". | paths | length", 1, 0, "1\n2") != 1 { return 161 }
     42
 }
 
