@@ -33,7 +33,13 @@ This file tracks current work and completed gate-backed language surface.
       143~154(154케이스), 게이트 +4(55케이스).
 - [x] 1b. 9라운드 래더 ✅ — fmt/workflow/test.sh 417/parity 417/
       release GREEN, 커밋.
-- [ ] 2. vaislisp 풀/힙 캡 파티션 (4095→8190, 2-way + 접근 헬퍼)
+- [x] 2. vaislisp 풀/힙 캡 파티션 ✅ 2026-08-19 — spool/cars/cdrs
+      각각 primary+overflow 2-way(밀집 인덱스, 태그 값 불변, 캡
+      4095→8190), pool_put/pool_str·heap_cons/car/cdr 접근 헬퍼로
+      전 사이트 단일화(eval_at 12-param). 게이트: ~6000 intern +
+      5000 cons 스트레스 .lisp exit 42(구캡이면 134). **경유 발견:
+      루프 내 문자열 리터럴이 평가마다 재-intern — 리터럴 캐시를
+      후보 등록**(첫 스트레스가 15000 intern으로 신캡도 초과).
 - [ ] 3. vaislisp 표면 5라운드 (가변 인자 산술/mod/list-ref/str↔num)
 진행률: 1/3
 

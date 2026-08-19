@@ -1,5 +1,20 @@
 # Vais Worklog
 
+## 2026-08-19b (vaislisp 풀/힙 2-way 파티션 — 캡 4095→8190)
+
+spool/cars/cdrs를 primary+overflow 쌍으로 — 인덱스는 밀집(combined
+길이가 곧 새 인덱스)이라 태그 인코딩 불변, 접근은
+pool_put/pool_str/heap_cons/heap_car/heap_cdr 헬퍼로 단일화(직접
+인덱싱 사이트 전부 치환, 호출 꼬리 40곳 확장 — eval_at 9→12-param,
+apply_fn 13-param: 16 상한 내). 8190 초과는 overflow push가 기존
+리스트 트랩으로 LOUD.
+
+**스트레스가 곧 환류**: 첫 프로브(5000회 str-cat 루프)가 신캡마저
+초과(15000 intern) — 원인은 캡이 아니라 **루프 내 문자열 리터럴이
+평가마다 재-intern**되는 것. 부하를 6000 intern+5000 cons로 조정해
+파티션 자체를 실증(구캡이면 134, 신캡 42 — 게이트 잠금)하고, 리터럴
+캐시(토큰 위치 키)를 다음 후보로 등록.
+
 ## 2026-08-19 (vaisjq 9라운드 — 산술 스테이지/tostring/tonumber)
 
 **산술 스테이지**: 경로 파스 폴백 앞에서 공백 구분 ` op ` 검출(따옴표

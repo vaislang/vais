@@ -6,7 +6,9 @@
 # pool at the STR band, cons cells index parallel car/cdr heaps at the
 # CONS band, function values index the defun/lambda table at the FN
 # band, and nil is one reserved constant. Arithmetic outside the number
-# band reports a loud error and yields 0.
+# band reports a loud error and yields 0. The string pool and cons
+# heap are two-way partitioned (primary + overflow lists), so each
+# holds 8190 entries; past that the overflow push traps loudly.
 #
 # Surface: (+ - * / < > =), (if c a b) with b optional (falsy without
 # an else is nil), (cond (test body...) ... (else body...)), (and
@@ -174,10 +176,48 @@ fn skip_expr(toks: List<Str>, pos: Int) -> Int {
     p
 }
 
-# Intern a string into the pool and return its tagged value.
-fn intern_str(s: Str, spool: List<Str>) -> Int {
-    spool.push(s)
-    str_base() + spool.len() - 1
+# Two-way partitioned string pool and cons heap: the first 4095
+# entries live in the primary lists, the next 4095 in the overflow
+# lists, doubling each cap to 8190 (indexes stay dense, so tagged
+# values are unchanged). Past 8190 the overflow push traps loudly.
+fn pool_put(s: Str, spool: List<Str>, spool2: List<Str>) -> Int {
+    let combined = spool.len() + spool2.len()
+    if combined < 4095 {
+        spool.push(s)
+    } else {
+        spool2.push(s)
+    }
+    str_base() + combined
+}
+
+fn pool_str(v: Int, spool: List<Str>, spool2: List<Str>) -> Str {
+    let idx = v - str_base()
+    if idx < 4095 { return spool[idx] }
+    spool2[idx - 4095]
+}
+
+fn heap_cons(a: Int, d: Int, cars: List<Int>, cars2: List<Int>, cdrs: List<Int>, cdrs2: List<Int>) -> Int {
+    let combined = cars.len() + cars2.len()
+    if combined < 4095 {
+        cars.push(a)
+        cdrs.push(d)
+    } else {
+        cars2.push(a)
+        cdrs2.push(d)
+    }
+    cons_base() + combined
+}
+
+fn heap_car(v: Int, cars: List<Int>, cars2: List<Int>) -> Int {
+    let idx = v - cons_base()
+    if idx < 4095 { return cars[idx] }
+    cars2[idx - 4095]
+}
+
+fn heap_cdr(v: Int, cdrs: List<Int>, cdrs2: List<Int>) -> Int {
+    let idx = v - cons_base()
+    if idx < 4095 { return cdrs[idx] }
+    cdrs2[idx - 4095]
 }
 
 # Build a value from the token span at pos without evaluating: numbers
@@ -185,17 +225,17 @@ fn intern_str(s: Str, spool: List<Str>) -> Int {
 # its interned name, and parenthesized spans as cons lists built
 # element by element. A nested quote token quotes the inner expression
 # directly. Returns (value, next-pos).
-fn quote_at(toks: List<Str>, pos: Int, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> (Int, Int) {
+fn quote_at(toks: List<Str>, pos: Int, spool: List<Str>, spool2: List<Str>, cars: List<Int>, cars2: List<Int>, cdrs: List<Int>, cdrs2: List<Int>) -> (Int, Int) {
     if pos >= toks.len() { return (nil_val(), pos) }
     let t = toks[pos]
     if t == "'" {
-        return quote_at(toks, pos + 1, spool, cars, cdrs)
+        return quote_at(toks, pos + 1, spool, spool2, cars, cars2, cdrs, cdrs2)
     }
     if t == "(" {
         let items: List<Int> = []
         let mut p = pos + 1
         while toks[p] != ")" {
-            let (iv, np) = quote_at(toks, p, spool, cars, cdrs)
+            let (iv, np) = quote_at(toks, p, spool, spool2, cars, cars2, cdrs, cdrs2)
             items.push(iv)
             p = np
         }
@@ -203,9 +243,7 @@ fn quote_at(toks: List<Str>, pos: Int, spool: List<Str>, cars: List<Int>, cdrs: 
         let mut ri = items.len()
         while ri > 0 {
             ri -= 1
-            cars.push(items[ri])
-            cdrs.push(acc)
-            acc = cons_base() + cars.len() - 1
+            acc = heap_cons(items[ri], acc, cars, cars2, cdrs, cdrs2)
         }
         return (acc, p + 1)
     }
@@ -214,20 +252,20 @@ fn quote_at(toks: List<Str>, pos: Int, spool: List<Str>, cars: List<Int>, cdrs: 
     }
     if t[0] == 34 {
         let inner = str_slice(t, 1, t.len() - 2)
-        return (intern_str(inner, spool), pos + 1)
+        return (pool_put(inner, spool, spool2), pos + 1)
     }
     if t == "nil" {
         return (nil_val(), pos + 1)
     }
-    (intern_str(t, spool), pos + 1)
+    (pool_put(t, spool, spool2), pos + 1)
 }
 
 # Render a value for printing: pool strings verbatim, cons chains as
 # "(a b c)" with a dotted tail when the cdr is not nil or a cons,
 # functions as "<fn>", nil as "nil", numbers as digits.
-fn print_value(v: Int, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> Str {
+fn print_value(v: Int, spool: List<Str>, spool2: List<Str>, cars: List<Int>, cars2: List<Int>, cdrs: List<Int>, cdrs2: List<Int>) -> Str {
     if v == nil_val() { return "nil" }
-    if is_str_val(v) == 1 { return spool[v - str_base()] }
+    if is_str_val(v) == 1 { return pool_str(v, spool, spool2) }
     if is_fn_val(v) == 1 { return "<fn>" }
     if is_cons_val(v) == 1 {
         let b = str_builder_new()
@@ -240,15 +278,15 @@ fn print_value(v: Int, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> St
                 let sp = str_builder_append(b, " ")
             }
             first = 0
-            let o2 = str_builder_append(b, @(cars[cur - cons_base()], spool, cars, cdrs))
-            let nxt = cdrs[cur - cons_base()]
+            let o2 = str_builder_append(b, @(heap_car(cur, cars, cars2), spool, spool2, cars, cars2, cdrs, cdrs2))
+            let nxt = heap_cdr(cur, cdrs, cdrs2)
             if nxt == nil_val() {
                 going = 0
             } else if is_cons_val(nxt) == 1 {
                 cur = nxt
             } else {
                 let o3 = str_builder_append(b, " . ")
-                let o4 = str_builder_append(b, @(nxt, spool, cars, cdrs))
+                let o4 = str_builder_append(b, @(nxt, spool, spool2, cars, cars2, cdrs, cdrs2))
                 going = 0
             }
         }
@@ -263,7 +301,7 @@ fn print_value(v: Int, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> St
 # map, evaluate the body, restore the shadowed values, return the body
 # value. Shared by named defun calls, lambda values, and higher-order
 # applications.
-fn apply_fn(toks: List<Str>, fi: Int, argv: List<Int>, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> Int {
+fn apply_fn(toks: List<Str>, fi: Int, argv: List<Int>, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>, spool: List<Str>, spool2: List<Str>, cars: List<Int>, cars2: List<Int>, cdrs: List<Int>, cdrs2: List<Int>) -> Int {
     let pstart = fparams[fi]
     let saved_names: List<Str> = []
     let saved_vals: List<Int> = []
@@ -286,7 +324,7 @@ fn apply_fn(toks: List<Str>, fi: Int, argv: List<Int>, genv: Map<Str,Int>, fname
         pp += 1
         ai += 1
     }
-    let (rv, rp) = eval_at(toks, fbodies[fi], genv, fnames, fparams, fbodies, spool, cars, cdrs)
+    let (rv, rp) = eval_at(toks, fbodies[fi], genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
     let mut si = 0
     while si < saved_names.len() {
         if saved_had[si] == 1 {
@@ -300,11 +338,11 @@ fn apply_fn(toks: List<Str>, fi: Int, argv: List<Int>, genv: Map<Str,Int>, fname
 }
 
 # Evaluate one expression at pos; returns (value, next-pos).
-fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> (Int, Int) {
+fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>, spool: List<Str>, spool2: List<Str>, cars: List<Int>, cars2: List<Int>, cdrs: List<Int>, cdrs2: List<Int>) -> (Int, Int) {
     if pos >= toks.len() { return (0, pos) }
     let t = toks[pos]
     if t == "'" {
-        return quote_at(toks, pos + 1, spool, cars, cdrs)
+        return quote_at(toks, pos + 1, spool, spool2, cars, cars2, cdrs, cdrs2)
     }
     if t != "(" {
         if is_digit_atom(t) == 1 {
@@ -312,7 +350,7 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         }
         if t[0] == 34 {
             let inner = str_slice(t, 1, t.len() - 2)
-            return (intern_str(inner, spool), pos + 1)
+            return (pool_put(inner, spool, spool2), pos + 1)
         }
         if t == "nil" {
             return (nil_val(), pos + 1)
@@ -326,17 +364,17 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
     let head = toks[pos + 1]
     if head == "define" or head == "set" {
         let name = toks[pos + 2]
-        let (v, np) = eval_at(toks, pos + 3, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (v, np) = eval_at(toks, pos + 3, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         genv.insert(name, v)
         return (v, np + 1)
     }
     if head == "if" {
         # The else branch is optional: a falsy condition without one
         # yields nil.
-        let (c, cp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (c, cp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         if c != 0 {
             if c != nil_val() {
-                let (a, ap) = eval_at(toks, cp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                let (a, ap) = eval_at(toks, cp, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
                 if toks[ap] == ")" { return (a, ap + 1) }
                 let ep = skip_expr(toks, ap)
                 return (a, ep + 1)
@@ -344,7 +382,7 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         }
         let sp = skip_expr(toks, cp)
         if toks[sp] == ")" { return (nil_val(), sp + 1) }
-        let (b, bp) = eval_at(toks, sp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (b, bp) = eval_at(toks, sp, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         return (b, bp + 1)
     }
     if head == "while" {
@@ -353,7 +391,7 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         let mut last = 0
         let mut looping = 1
         while looping == 1 {
-            let (c, cp) = eval_at(toks, cond_pos, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+            let (c, cp) = eval_at(toks, cond_pos, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
             let mut truthy = 1
             if c == 0 { truthy = 0 }
             if c == nil_val() { truthy = 0 }
@@ -362,7 +400,7 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
             } else {
                 let mut bp = body_pos
                 while toks[bp] != ")" {
-                    let (v, np) = eval_at(toks, bp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                    let (v, np) = eval_at(toks, bp, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
                     last = v
                     bp = np
                 }
@@ -378,14 +416,14 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         let mut p = pos + 2
         let mut last = 0
         while toks[p] != ")" {
-            let (v, np) = eval_at(toks, p, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+            let (v, np) = eval_at(toks, p, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
             last = v
             p = np
         }
         return (last, p + 1)
     }
     if head == "quote" {
-        let (qv, qp) = quote_at(toks, pos + 2, spool, cars, cdrs)
+        let (qv, qp) = quote_at(toks, pos + 2, spool, spool2, cars, cars2, cdrs, cdrs2)
         return (qv, qp + 1)
     }
     if head == "let" {
@@ -399,7 +437,7 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         let mut bp = pos + 3
         while toks[bp] != ")" {
             let bname = toks[bp + 1]
-            let (bv, bnp) = eval_at(toks, bp + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+            let (bv, bnp) = eval_at(toks, bp + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
             saved_names.push(bname)
             if genv.contains(bname) {
                 saved_had.push(1)
@@ -414,7 +452,7 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         let mut lp2 = bp + 1
         let mut lastv = 0
         while toks[lp2] != ")" {
-            let (v2, np2) = eval_at(toks, lp2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+            let (v2, np2) = eval_at(toks, lp2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
             lastv = v2
             lp2 = np2
         }
@@ -447,7 +485,7 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
                     cbp = ccp + 2
                     ctruthy = 1
                 } else {
-                    let (ctv, ctnp) = eval_at(toks, ccp + 1, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                    let (ctv, ctnp) = eval_at(toks, ccp + 1, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
                     cbp = ctnp
                     if ctv != 0 {
                         if ctv != nil_val() {
@@ -458,7 +496,7 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
                 }
                 if ctruthy == 1 {
                     while toks[cbp] != ")" {
-                        let (cbv, cbnp) = eval_at(toks, cbp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                        let (cbv, cbnp) = eval_at(toks, cbp, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
                         cres = cbv
                         cbp = cbnp
                     }
@@ -488,7 +526,7 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
             if sdone == 1 {
                 sp2 = skip_expr(toks, sp2)
             } else {
-                let (ov, onp) = eval_at(toks, sp2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+                let (ov, onp) = eval_at(toks, sp2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
                 sres = ov
                 sp2 = onp
                 let mut struthy = 1
@@ -505,8 +543,8 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         return (sres, sp2 + 1)
     }
     if head == "print" {
-        let (v, np) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
-        print(print_value(v, spool, cars, cdrs))
+        let (v, np) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
+        print(print_value(v, spool, spool2, cars, cars2, cdrs, cdrs2))
         return (v, np + 1)
     }
     if head == "defun" {
@@ -527,28 +565,26 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         return (fn_base() + fnames.len() - 1, lend + 1)
     }
     if head == "cons" {
-        let (a, ap) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
-        let (d, dp) = eval_at(toks, ap, genv, fnames, fparams, fbodies, spool, cars, cdrs)
-        cars.push(a)
-        cdrs.push(d)
-        return (cons_base() + cars.len() - 1, dp + 1)
+        let (a, ap) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
+        let (d, dp) = eval_at(toks, ap, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
+        return (heap_cons(a, d, cars, cars2, cdrs, cdrs2), dp + 1)
     }
     if head == "car" or head == "cdr" {
-        let (p1, np1) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (p1, np1) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         if is_cons_val(p1) == 0 {
             print(f"error: {head} needs a cons")
             return (nil_val(), np1 + 1)
         }
         if head == "car" {
-            return (cars[p1 - cons_base()], np1 + 1)
+            return (heap_car(p1, cars, cars2), np1 + 1)
         }
-        return (cdrs[p1 - cons_base()], np1 + 1)
+        return (heap_cdr(p1, cdrs, cdrs2), np1 + 1)
     }
     if head == "list" {
         let items: List<Int> = []
         let mut lp = pos + 2
         while toks[lp] != ")" {
-            let (iv, inp) = eval_at(toks, lp, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+            let (iv, inp) = eval_at(toks, lp, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
             items.push(iv)
             lp = inp
         }
@@ -556,48 +592,46 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         let mut ri = items.len()
         while ri > 0 {
             ri -= 1
-            cars.push(items[ri])
-            cdrs.push(acc)
-            acc = cons_base() + cars.len() - 1
+            acc = heap_cons(items[ri], acc, cars, cars2, cdrs, cdrs2)
         }
         return (acc, lp + 1)
     }
     if head == "null?" {
-        let (nv, nnp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (nv, nnp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         let mut isn = 0
         if nv == nil_val() { isn = 1 }
         return (isn, nnp + 1)
     }
     if head == "str-len" {
-        let (sv, snp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (sv, snp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         if is_str_val(sv) == 0 {
             print("error: str-len needs a string")
             return (0, snp + 1)
         }
-        let pooled = spool[sv - str_base()]
+        let pooled = pool_str(sv, spool, spool2)
         return (pooled.len(), snp + 1)
     }
     if head == "str-cat" {
-        let (s1, sp1) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
-        let (s2, sp2) = eval_at(toks, sp1, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (s1, sp1) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
+        let (s2, sp2) = eval_at(toks, sp1, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         if is_str_val(s1) == 0 or is_str_val(s2) == 0 {
             print("error: str-cat needs strings")
             return (0, sp2 + 1)
         }
-        let joined = str_concat(spool[s1 - str_base()], spool[s2 - str_base()])
-        return (intern_str(joined, spool), sp2 + 1)
+        let joined = str_concat(pool_str(s1, spool, spool2), pool_str(s2, spool, spool2))
+        return (pool_put(joined, spool, spool2), sp2 + 1)
     }
     if head == "str-ref" or head == "str-byte" {
         # (str-ref s i) is the one-byte string at i; (str-byte s i) is
         # that byte as a number. Both are loud on a non-string, a
         # non-number index, or an out-of-range index.
-        let (sv, rp1) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
-        let (iv, rp2) = eval_at(toks, rp1, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (sv, rp1) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
+        let (iv, rp2) = eval_at(toks, rp1, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         if is_str_val(sv) == 0 or is_num_val(iv) == 0 {
             print(f"error: {head} needs a string and an index")
             return (0, rp2 + 1)
         }
-        let pooled = spool[sv - str_base()]
+        let pooled = pool_str(sv, spool, spool2)
         if iv < 0 or iv >= pooled.len() {
             print(f"error: {head} index out of range")
             return (0, rp2 + 1)
@@ -605,16 +639,16 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         if head == "str-byte" {
             return (pooled[iv], rp2 + 1)
         }
-        return (intern_str(str_slice(pooled, iv, 1), spool), rp2 + 1)
+        return (pool_put(str_slice(pooled, iv, 1), spool, spool2), rp2 + 1)
     }
     if head == "+" or head == "-" or head == "*" or head == "/" or head == "<" or head == ">" or head == "=" {
-        let (a, ap) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
-        let (b, bp) = eval_at(toks, ap, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (a, ap) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
+        let (b, bp) = eval_at(toks, ap, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         if head == "=" {
             if is_str_val(a) == 1 {
                 if is_str_val(b) == 1 {
                     let mut eqv = 0
-                    if spool[a - str_base()] == spool[b - str_base()] { eqv = 1 }
+                    if pool_str(a, spool, spool2) == pool_str(b, spool, spool2) { eqv = 1 }
                     return (eqv, bp + 1)
                 }
             }
@@ -659,7 +693,7 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
     }
     let mut hp = pos + 2
     if fi < 0 {
-        let (hv, hnp) = eval_at(toks, pos + 1, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (hv, hnp) = eval_at(toks, pos + 1, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         if is_fn_val(hv) == 0 {
             print(f"error: not a function: {head}")
             let ep = skip_expr(toks, pos)
@@ -671,22 +705,22 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
     let argv: List<Int> = []
     let mut ap2 = hp
     while toks[ap2] != ")" {
-        let (av, anp) = eval_at(toks, ap2, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (av, anp) = eval_at(toks, ap2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         argv.push(av)
         ap2 = anp
     }
-    let rv = apply_fn(toks, fi, argv, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+    let rv = apply_fn(toks, fi, argv, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
     return (rv, ap2 + 1)
 }
 
 # Evaluate every top-level expression in [start, toks.len()); returns
 # the last value. The np <= p guard turns malformed input into a stop
 # instead of a spin.
-fn eval_program(toks: List<Str>, start: Int, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>, spool: List<Str>, cars: List<Int>, cdrs: List<Int>) -> Int {
+fn eval_program(toks: List<Str>, start: Int, genv: Map<Str,Int>, fnames: List<Str>, fparams: List<Int>, fbodies: List<Int>, spool: List<Str>, spool2: List<Str>, cars: List<Int>, cars2: List<Int>, cdrs: List<Int>, cdrs2: List<Int>) -> Int {
     let mut p = start
     let mut last = 0
     while p < toks.len() {
-        let (v, np) = eval_at(toks, p, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+        let (v, np) = eval_at(toks, p, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         last = v
         if np <= p { return last }
         p = np
@@ -702,9 +736,12 @@ fn eval_source(src: Str) -> Int {
     let fparams: List<Int> = []
     let fbodies: List<Int> = []
     let spool: List<Str> = []
+    let spool2: List<Str> = []
     let cars: List<Int> = []
+    let cars2: List<Int> = []
     let cdrs: List<Int> = []
-    eval_program(toks, 0, genv, fnames, fparams, fbodies, spool, cars, cdrs)
+    let cdrs2: List<Int> = []
+    eval_program(toks, 0, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
 }
 
 # REPL: one growing token list keeps defun and lambda bodies
@@ -717,8 +754,11 @@ fn run_repl() -> Int {
     let fparams: List<Int> = []
     let fbodies: List<Int> = []
     let spool: List<Str> = []
+    let spool2: List<Str> = []
     let cars: List<Int> = []
+    let cars2: List<Int> = []
     let cdrs: List<Int> = []
+    let cdrs2: List<Int> = []
     let mut last = 0
     let mut going = 1
     while going == 1 {
@@ -730,8 +770,8 @@ fn run_repl() -> Int {
             let fns_before = fnames.len()
             let added = tokenize_into(line, toks)
             if added > 0 {
-                last = eval_program(toks, start, genv, fnames, fparams, fbodies, spool, cars, cdrs)
-                print(f"= {print_value(last, spool, cars, cdrs)}")
+                last = eval_program(toks, start, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
+                print(f"= {print_value(last, spool, spool2, cars, cars2, cdrs, cdrs2)}")
                 # Only defun/lambda registrations keep token spans alive;
                 # a line that registered none rolls its tokens back so a
                 # long session of throwaway expressions never exhausts

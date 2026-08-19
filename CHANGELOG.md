@@ -4,6 +4,17 @@
 
 ### Added
 
+- vaislisp partitioned stores: the string pool and cons heap now
+  span a primary plus an overflow list each (dense indexes, tagged
+  values unchanged), doubling both session caps from 4095 to 8190
+  entries behind pool_put/pool_str and heap_cons/heap_car/heap_cdr
+  accessors — a workflow-gate stress program interns ~6000 strings
+  and builds 5000 cons cells, loads that trapped under the old caps.
+  Building the stress case surfaced a follow-up candidate: string
+  literals re-intern on every evaluation inside loops, so a hot loop
+  can still exhaust the pool; literal caching is registered as the
+  next demand.
+
 - vaisjq round 9, arithmetic and casts: a pipeline stage may compute
   `<path> op <path or integer>` with one space-delimited `+`, `-`,
   `*`, or `/` — both operands must be numbers, division by zero and
