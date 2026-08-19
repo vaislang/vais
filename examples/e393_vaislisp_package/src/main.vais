@@ -183,7 +183,20 @@ fn skip_expr(toks: List<Str>, pos: Int) -> Int {
 # entries live in the primary lists, the next 4095 in the overflow
 # lists, doubling each cap to 8190 (indexes stay dense, so tagged
 # values are unchanged). Past 8190 the overflow push traps loudly.
+# pool_put dedups by content, so a literal or a computed string
+# re-interned inside a hot loop reuses its slot instead of growing
+# the pool — the scan cost tracks the number of distinct strings.
 fn pool_put(s: Str, spool: List<Str>, spool2: List<Str>) -> Int {
+    let mut di = 0
+    while di < spool.len() {
+        if spool[di] == s { return str_base() + di }
+        di += 1
+    }
+    let mut dj = 0
+    while dj < spool2.len() {
+        if spool2[dj] == s { return str_base() + 4095 + dj }
+        dj += 1
+    }
     let combined = spool.len() + spool2.len()
     if combined < 4095 {
         spool.push(s)

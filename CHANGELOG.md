@@ -4,6 +4,16 @@
 
 ### Added
 
+- vaislisp string-pool dedup: pool_put now returns the existing slot
+  when the content is already interned, so literals and computed
+  strings re-evaluated inside hot loops reuse one entry instead of
+  growing the pool — the loop that previously overflowed even the
+  partitioned pool (15,000 interns of three distinct strings) now
+  uses three slots, and the scan cost tracks the number of distinct
+  strings. The workflow stress program tightens to that original
+  load plus five thousand distinct num->str strings, which exercises
+  the overflow partition for real, plus five thousand cons cells.
+
 - vaislisp surface round 5: `+`, `-`, `*`, and `/` become variadic
   with left folds — `(+)` is 0, `(*)` is 1, `(- x)` negates, `/`
   needs at least two operands, and non-numbers or division by zero

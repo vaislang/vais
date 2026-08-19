@@ -22,7 +22,18 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-19) — 잔여 후보 3건 일괄 (사용자 지시)
+## 현재 작업 (2026-08-20) — 잔여 후보 우선순위 일괄 (사용자 지시)
+모드: 개별선택 — ① 리터럴 캐시 → ② vaisjq 10라운드 → ③ v1.5.0 컷
+- [x] 1. vaislisp 풀 dedup ✅ 2026-08-20 — pool_put 내용 dedup(토큰
+      위치 캐시 대신: 계산 문자열 재-intern까지 근본 해소, 비용은
+      distinct 수 비례). 원래 트랩 부하(15000 intern→3슬롯) + 5000
+      distinct(num->str — 오버플로 파티션 실사용) + 5000 cons 강화
+      스트레스 0.06s exit 42 게이트 교체.
+- [ ] 2. vaisjq 10라운드 (recurse/paths — 수집 프리패스로 16-param 유지)
+- [ ] 3. v1.5.0 컷
+진행률: 1/3
+
+## 직전 완료 (2026-08-19) — 잔여 후보 3건 일괄 (사용자 지시)
 모드: 개별선택 — vaisjq 9라운드 → vaislisp 풀 캡 파티션 → 표면 5라운드
 - [x] 1. vaisjq 9라운드 ✅ 2026-08-19 — 산술 스테이지 `<path> op
       <path|정수>`(스테이지당 공백 구분 단일 이항 op, 수 전용,
