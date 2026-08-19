@@ -1,5 +1,18 @@
 # Vais Worklog
 
+## 2026-08-19c (vaislisp 표면 5라운드 — 가변 산술/mod/list-ref/캐스트)
+
+산술 분기 재구성: `+ - * /`를 **가변 인자 좌측 접기**로 분리(수집
+후 전-원소 수 검사 → 접기; (+)=0, (*)=1, (- x)=부정, /는 2+ 인자·
+단계별 0-나눗셈 LOUD), `< > =`는 기존 2인자 경로 유지(문자열 =
+동등 포함). 신규: mod(트렁케이션 — 코퍼스 수제 정의와 동일 의미),
+list-ref(heap_cdr 워크, 범위 밖 LOUD+nil), str->num(is_digit_atom
+게이트+parse_int)/num->str(pool_put) — fizzbuzz가 수제 mod를
+내장으로 교체(잠긴 출력 불변 = 게이트 12케이스가 회귀 증명).
+
+첫 빌드 49케이스 전부 정답. 게이트 vaislisp 36케이스. 잔여 후보
+3건(vaisjq 9/파티션/표면 5) 일괄 사이클 종결.
+
 ## 2026-08-19b (vaislisp 풀/힙 2-way 파티션 — 캡 4095→8190)
 
 spool/cars/cdrs를 primary+overflow 쌍으로 — 인덱스는 밀집(combined

@@ -4,6 +4,17 @@
 
 ### Added
 
+- vaislisp surface round 5: `+`, `-`, `*`, and `/` become variadic
+  with left folds — `(+)` is 0, `(*)` is 1, `(- x)` negates, `/`
+  needs at least two operands, and non-numbers or division by zero
+  stay loud — while `<`, `>`, and `=` remain binary. New forms:
+  `(mod a b)` (truncated, zero divisor loud), `(list-ref l n)`
+  (out-of-range loud, yields nil), and the casts `(str->num s)` /
+  `(num->str n)` closing the string-building gap the fizzbuzz corpus
+  worked around. The fizzbuzz program drops its hand-built mod for
+  the builtin with locked outputs unchanged, self-test grows to 49
+  cases, and the workflow gate adds three round-5 cases.
+
 - vaislisp partitioned stores: the string pool and cons heap now
   span a primary plus an overflow list each (dense indexes, tagged
   values unchanged), doubling both session caps from 4095 to 8190

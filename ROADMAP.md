@@ -40,8 +40,13 @@ This file tracks current work and completed gate-backed language surface.
       5000 cons 스트레스 .lisp exit 42(구캡이면 134). **경유 발견:
       루프 내 문자열 리터럴이 평가마다 재-intern — 리터럴 캐시를
       후보 등록**(첫 스트레스가 15000 intern으로 신캡도 초과).
-- [ ] 3. vaislisp 표면 5라운드 (가변 인자 산술/mod/list-ref/str↔num)
-진행률: 1/3
+- [x] 3. vaislisp 표면 5라운드 ✅ 2026-08-19 — **가변 인자 + - * /**
+      (좌측 접기, (+)=0/(*)=1/(- x)=부정// 2+ 인자, 비수·0나눗셈
+      LOUD; < > =는 2인자 유지) + mod(트렁케이션)/list-ref(범위 밖
+      LOUD+nil)/str->num·num->str(fizzbuzz 수제 mod 우회의 근본
+      해소). fizzbuzz 내장 mod 리라이트(잠긴 출력 불변=회귀 증명),
+      self-test 49케이스, 게이트 vaislisp 36케이스.
+진행률: 3/3 (100%) — 전 사이클 래더 GREEN
 
 ## 직전 완료 (2026-08-18) — vaisjq 8라운드: 경로 비교/not/객체 템플릿
 모드: 개별선택 (등록 후보 소화 — 비교·합성 마감)

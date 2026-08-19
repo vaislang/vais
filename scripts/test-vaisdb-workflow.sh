@@ -458,6 +458,9 @@ expect_exit "vaislisp program words exit" 42 /bin/sh -c "'$lisp_dist/bin/vaislis
 expect_exit "vaislisp repl exits clean at EOF" 0 /bin/sh -c "printf '(str-cat \"a\" \"b\")\n' | '$lisp_dist/bin/vaislisp' repl >/dev/null"
 printf '(define i 0)\n(define s "x")\n(while (< i 2000) (set s (str-cat "x" "y")) (set i (+ i 1)))\n(define c 0)\n(define l nil)\n(while (< c 5000) (set l (cons c l)) (set c (+ c 1)))\n(if (= (str-len s) 2) (if (= (car l) 4999) 42 1) 2)\n' > "$tmp/lisp-pool-stress.lisp"
 expect_exit "vaislisp partitioned pools pass the old caps" 42 /bin/sh -c "'$lisp_dist/bin/vaislisp' '$tmp/lisp-pool-stress.lisp' >/dev/null"
+expect_exit "vaislisp variadic arithmetic folds" 0 /bin/sh -c "printf '(+ 1 2 3 36)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
+expect_exit "vaislisp mod and casts compose" 0 /bin/sh -c "printf '(num->str (mod 100 29))\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 13'"
+expect_exit "vaislisp list-ref indexes lists" 0 /bin/sh -c "printf '(list-ref (list 40 41 42) 2)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
 
 # vaisjq: the integer JSON parser / jq-subset query tool — self-test,
 # path queries, iteration, pipe tails, both render modes, and the
