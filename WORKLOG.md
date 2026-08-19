@@ -1,5 +1,16 @@
 # Vais Worklog
 
+## 2026-08-20c (v1.5.0 릴리스 컷)
+
+v1.4.0 이후 8커밋 회전 고정: **vaisjq 6~10라운드**(group_by 수제
+안정 정렬·to/from_entries·reverse → 따옴표 키·슬라이스·any/all →
+경로 간 비교(value_eq 깊은 동등)·not·객체 템플릿 값 → 산술 스테이지
+·tostring/tonumber → recurse·paths — self-test 161케이스·게이트
+58케이스, eval_filter 16-param 전 라운드 불변), **vaislisp 스케일
+2건**(풀/힙 2-way 파티션 8190 + 풀 내용 dedup — 핫루프 재-intern
+근본 해소) + **표면 5라운드**(가변 산술/mod/list-ref/str↔num).
+컷은 버전 define(1.5.0)/CHANGELOG 로테이션/노트만, 전체 래더 검증.
+
 ## 2026-08-20b (vaisjq 10라운드 — recurse/paths)
 
 **recurse**(kind 26): collect_values 프리패스(5-param — v 자신 push

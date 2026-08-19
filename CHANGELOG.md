@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.5.0 - 2026-08-20
+
 ### Added
 
 - vaisjq round 10, deep traversal: `recurse` emits a value and every

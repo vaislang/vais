@@ -36,8 +36,13 @@ This file tracks current work and completed gate-backed language surface.
       리스트 4095 계약은 LOUD 트랩. self-test 161/게이트 vaisjq
       58케이스. 트랩: recurse|select(has(...))는 스칼라에 LOUD가
       계약(jq 동일 — 게이트 케이스를 == 비교로).
-- [ ] 3. v1.5.0 컷
-진행률: 1/3
+- [x] 3. v1.5.0 컷 ✅ 2026-08-20 — v1.4.0 이후 8커밋 회전: vaisjq
+      6~10라운드(group_by·entries·reverse/따옴표 키·슬라이스·any·
+      all/경로 비교·not·객체 템플릿/산술·캐스트/recurse·paths —
+      self-test 161·게이트 58케이스), vaislisp 2-way 파티션+풀
+      dedup(핫루프 재-intern 해소)+표면 5라운드(가변 산술/mod/
+      list-ref/캐스트). 버전 define/CHANGELOG 로테이션/노트만.
+진행률: 3/3 (100%)
 
 ## 직전 완료 (2026-08-19) — 잔여 후보 3건 일괄 (사용자 지시)
 모드: 개별선택 — vaisjq 9라운드 → vaislisp 풀 캡 파티션 → 표면 5라운드
