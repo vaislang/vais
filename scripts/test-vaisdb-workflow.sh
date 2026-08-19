@@ -514,6 +514,10 @@ expect_exit "vaisjq deep object equality ignores order" 0 /bin/sh -c "printf '[{
 expect_exit "vaisjq not negates a reduce chain" 0 /bin/sh -c "printf '[{\"ok\":true},{\"ok\":false}]' | '$jq_dist/bin/vaisjq' '. | map(.ok) | all | not' | grep -qx 'true'"
 expect_exit "vaisjq object template values interpolate" 0 /bin/sh -c "printf '{\"name\":\"ann\",\"age\":30}' | '$jq_dist/bin/vaisjq' -c '. | {who: .name, msg: \"\\(.name) is \\(.age)\"}' | grep -qx '{\"who\":\"ann\",\"msg\":\"ann is 30\"}'"
 expect_exit "vaisjq ordered path compare rejects mixed" 3 /bin/sh -c "printf '[{\"a\":\"s\",\"b\":1}]' | '$jq_dist/bin/vaisjq' '.[] | select(.a < .b)' >/dev/null 2>&1"
+expect_exit "vaisjq arithmetic adds two paths" 0 /bin/sh -c "printf '{\"a\":40,\"b\":2}' | '$jq_dist/bin/vaisjq' '.a + .b' | grep -qx '42'"
+expect_exit "vaisjq arithmetic averages a pipeline" 0 /bin/sh -c "printf '{\"xs\":[10,20,30]}' | '$jq_dist/bin/vaisjq' '.xs | add | . / 3' | grep -qx '20'"
+expect_exit "vaisjq tostring tonumber roundtrip" 0 /bin/sh -c "printf '{\"n\":\"21\"}' | '$jq_dist/bin/vaisjq' '.n | tonumber | . * 2' | grep -qx '42'"
+expect_exit "vaisjq division by zero rejects loud" 3 /bin/sh -c "printf '{\"a\":1}' | '$jq_dist/bin/vaisjq' '.a / 0' >/dev/null 2>&1"
 
 vbox_dist="$tmp/vaisbox-dist"
 vbox_bin="$tmp/vaisbox-bin"

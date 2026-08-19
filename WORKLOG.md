@@ -1,5 +1,21 @@
 # Vais Worklog
 
+## 2026-08-19 (vaisjq 9라운드 — 산술 스테이지/tostring/tonumber)
+
+**산술 스테이지**: 경로 파스 폴백 앞에서 공백 구분 ` op ` 검출(따옴표
+인지) — 스테이지당 단일 이항 연산(우선순위 없음, 파이프로 합성이
+관용). LHS 경로는 owner atom(op 12), RHS는 정수 리터럴(litk 0) 또는
+경로(8라운드 passive op-15 슬롯 재사용, litk 5). 산술 op는
+seg_pay=atom_idx*8+op 팩킹(필드 상한: op<8 ✓). 수 전용·0-나눗셈·
+±1e15 밴드 가드 전부 LOUD. **tostring**: 문자열 통과, 그 외
+render_compact→intern. **tonumber**: 수 통과, 정수 문자열 파스 —
+**길이 16 선가드**(19자리 i64 랩어라운드가 밴드 가드를 우회하는
+구멍 차단). `.n | tonumber | . * 2` = 42, `.a + .b | tostring |
+"sum=\(.)"` 3단 합성 프로브.
+
+첫 빌드 154케이스 전부 정답, 컴파일러 무변경, eval_filter 16-param
+불변. 게이트 vaisjq 55케이스.
+
 ## 2026-08-18 (vaisjq 8라운드 — 경로 비교/not/객체 템플릿 값)
 
 **경로 간 비교**: RHS가 `.`로 시작하면 **passive atom(op 15 = meta

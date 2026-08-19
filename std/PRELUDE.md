@@ -149,7 +149,9 @@ verbatim-string, `true`, `false`, or `null` literals or another path
 `<`/`>`/`<=`/`>=` against integers (both sides numbers for path pairs), or
 bare truthiness where `false`/`null` drop, with `and` binding tighter than
 `or` and left-to-right short-circuit, and a `has(...)` atom testing the
-piped value — `not` negating truthiness, `map(<path>)` building a new array from each
+piped value — `not` negating truthiness, arithmetic stages `<path> op <path or
+integer>` with a single space-delimited `+`/`-`/`*`/`/`, `tostring` and
+`tonumber`, `map(<path>)` building a new array from each
 element's single-valued walk, `has("key")`/`has(N)` emitting true/false,
 `first`/`last` as index sugar, `add` (number sums inside the integer band
 or string concatenation; empty is null), `join("sep")` (strings verbatim,

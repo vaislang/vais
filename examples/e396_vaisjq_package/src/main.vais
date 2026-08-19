@@ -20,7 +20,11 @@
 # pipeline stages only), `[]` iteration (arrays emit elements,
 # objects emit values), `any`/`all` over element truthiness (empty
 # arrays give false/true), multi-stage pipes (pure path stages
-# concatenate), `not` negating truthiness,
+# concatenate), arithmetic stages `<path> op <path or integer>`
+# (single space-delimited + - * / per stage; numbers only, division
+# by zero and band overflow are loud), `tostring` (strings pass,
+# everything else renders compact) and `tonumber` (integer strings
+# parse, others are loud), `not` negating truthiness,
 # `select(<cond> [and|or <cond>]...)` stages — each condition is
 # `<path> [op <literal or path>]` with == != < > <= >= against
 # integer/string/true/false/null literals or another path (== and !=
@@ -1216,6 +1220,12 @@ fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<
             } else if part == "not" {
                 seg_kind.push(22)
                 seg_pay.push(0)
+            } else if part == "tostring" {
+                seg_kind.push(24)
+                seg_pay.push(0)
+            } else if part == "tonumber" {
+                seg_kind.push(25)
+                seg_pay.push(0)
             } else if part.len() >= 11 and str_slice(part, 0, 9) == "group_by(" {
                 if part[part.len() - 1] != 41 {
                     eprint("error: group_by is missing its closing parenthesis")
@@ -1356,7 +1366,66 @@ fn parse_filter(f: Str, seg_kind: List<Int>, seg_pay: List<Int>, sel_meta: List<
                 seg_kind.push(7)
                 seg_pay.push(intern(str_slice(jinner, 1, jinner.len() - 2), spool))
             } else {
-                if parse_path_into(part, seg_kind, seg_pay, spool, 1) != 0 { return 0 - 1 }
+                # arithmetic stage: `<path> op <path or integer>` with
+                # a single space-delimited + - * / at top level. The
+                # RHS path rides a passive op-15 atom (round-8
+                # pattern); the arithmetic op packs into the segment
+                # payload beside the owner atom index.
+                let mut aat = 0 - 1
+                let mut aop2 = 0
+                let mut sk = 0
+                let mut skinq = 0
+                while sk < part.len() {
+                    let sb2 = part[sk]
+                    if sb2 == 34 {
+                        if skinq == 1 { skinq = 0 } else { skinq = 1 }
+                    }
+                    if skinq == 0 and aat < 0 and sb2 == 32 and sk + 3 <= part.len() {
+                        let opb = part[sk + 1]
+                        if sk + 2 < part.len() and part[sk + 2] == 32 {
+                            if opb == 43 { aat = sk; aop2 = 0 }
+                            if opb == 45 { aat = sk; aop2 = 1 }
+                            if opb == 42 { aat = sk; aop2 = 2 }
+                            if opb == 47 { aat = sk; aop2 = 3 }
+                        }
+                    }
+                    sk += 1
+                }
+                if aat >= 0 {
+                    let alhs = str_slice(part, 0, aat).trim()
+                    let arhs = str_slice(part, aat + 3, part.len() - aat - 3).trim()
+                    if alhs.len() == 0 or arhs.len() == 0 {
+                        eprint("error: arithmetic needs both operands")
+                        return 0 - 1
+                    }
+                    if sel_meta.len() >= 4095 {
+                        eprint("error: filter is too large")
+                        return 0 - 1
+                    }
+                    let mut alitk = 0
+                    let mut alit = 0
+                    if arhs[0] == 46 {
+                        sel_meta.push(15 * 16)
+                        sel_lit.push(0)
+                        pend_paths.push(arhs)
+                        alitk = 5
+                        alit = sel_meta.len() - 1
+                    } else {
+                        let (rlv, rlok) = parse_bound(arhs, 0, arhs.len())
+                        if rlok == 0 {
+                            eprint("error: arithmetic operands are paths or integers")
+                            return 0 - 1
+                        }
+                        alit = rlv
+                    }
+                    sel_meta.push(12 * 16 + alitk)
+                    sel_lit.push(alit)
+                    pend_paths.push(alhs)
+                    seg_kind.push(23)
+                    seg_pay.push((sel_meta.len() - 1) * 8 + aop2)
+                } else {
+                    if parse_path_into(part, seg_kind, seg_pay, spool, 1) != 0 { return 0 - 1 }
+                }
             }
             part_start = i + 1
         }
@@ -2401,6 +2470,77 @@ fn eval_filter(v: Int, si: Int, n_main: Int, seg_kind: List<Int>, seg_pay: List<
         if v == null_val() { nres = true_val() }
         return eval_filter(nres, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
     }
+    if kind == 23 {
+        # arithmetic stage: both operands must be numbers, division
+        # by zero is loud, and results stay inside the integer band.
+        let apay = seg_pay[si]
+        let aidx = apay / 8
+        let aop3 = apay - aidx * 8
+        let lv2 = walk_path(v, sel_span[aidx * 2], sel_span[aidx * 2 + 1], seg_kind, seg_pay, spool, heads, ckeys, cvals, cnexts)
+        if lv2 == err_val() { return 3 }
+        let am = sel_meta[aidx]
+        let mut rv2 = sel_lit[aidx]
+        if am - 12 * 16 == 5 {
+            let rslot2 = sel_lit[aidx]
+            rv2 = walk_path(v, sel_span[rslot2 * 2], sel_span[rslot2 * 2 + 1], seg_kind, seg_pay, spool, heads, ckeys, cvals, cnexts)
+            if rv2 == err_val() { return 3 }
+        }
+        if is_num_val(lv2) == 0 or is_num_val(rv2) == 0 {
+            eprint("error: arithmetic needs numbers on both sides")
+            return 3
+        }
+        let mut ares = 0
+        if aop3 == 0 { ares = lv2 + rv2 }
+        if aop3 == 1 { ares = lv2 - rv2 }
+        if aop3 == 2 { ares = lv2 * rv2 }
+        if aop3 == 3 {
+            if rv2 == 0 {
+                eprint("error: division by zero")
+                return 3
+            }
+            ares = lv2 / rv2
+        }
+        if ares >= num_band() or ares <= 0 - num_band() {
+            eprint("error: arithmetic overflows the integer band")
+            return 3
+        }
+        return eval_filter(ares, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
+    if kind == 24 {
+        # tostring: strings pass through, everything else renders as
+        # compact JSON.
+        let mut sres2 = v
+        if is_str_val(v) == 0 {
+            sres2 = intern(render_compact(v, spool, heads, ckeys, cvals, cnexts), spool)
+        }
+        return eval_filter(sres2, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
+    if kind == 25 {
+        # tonumber: numbers pass through, integer strings parse, and
+        # everything else is loud.
+        if is_num_val(v) == 1 {
+            return eval_filter(v, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+        }
+        if is_str_val(v) == 0 {
+            eprint("error: tonumber needs a number or an integer string")
+            return 3
+        }
+        let ns = spool[v - str_base()]
+        if ns.len() > 16 {
+            eprint("error: tonumber overflows the integer band")
+            return 3
+        }
+        let (nv2, nok2) = parse_bound(ns, 0, ns.len())
+        if nok2 == 0 {
+            eprint("error: tonumber needs an integer string")
+            return 3
+        }
+        if nv2 >= num_band() or nv2 <= 0 - num_band() {
+            eprint("error: tonumber overflows the integer band")
+            return 3
+        }
+        return eval_filter(nv2, si + 1, n_main, seg_kind, seg_pay, sel_meta, sel_lit, sel_span, tail, compact, out, spool, heads, ckeys, cvals, cnexts)
+    }
     if kind == 7 {
         # join("sep"): strings verbatim, numbers stringified, null
         # empty; anything else is loud.
@@ -2668,6 +2808,20 @@ fn self_test() -> Int {
     if check_query("{\"name\":\"bo\",\"age\":25}", ". | {who: .name, line: \"\\(.age)y\"}", 1, 0, "{\"who\":\"bo\",\"line\":\"25y\"}") != 1 { return 140 }
     if check_query("{\"users\":[{\"name\":\"ann\"},{\"name\":\"bo\"}]}", ".users[] | {tag: \"u-\\(.name)\"}", 1, 0, "{\"tag\":\"u-ann\"}\n{\"tag\":\"u-bo\"}") != 1 { return 141 }
     if check_query("{\"a\":1}", ". | {x: \"plain\"}", 1, 0, "{\"x\":\"plain\"}") != 1 { return 142 }
+    # arithmetic stages: path op path, path op literal, guards
+    if check_query("{\"a\":40,\"b\":2}", ".a + .b", 1, 0, "42") != 1 { return 143 }
+    if check_query("{\"n\":21}", ".n * 2", 1, 0, "42") != 1 { return 144 }
+    if check_query("{\"total\":43}", ".total - 1", 1, 0, "42") != 1 { return 145 }
+    if check_query("{\"n\":84}", ".n / 2", 1, 0, "42") != 1 { return 146 }
+    if check_query("{\"n\":84}", ".n / 0", 1, 3, "") != 1 { return 147 }
+    if check_query("{\"a\":\"s\",\"b\":1}", ".a + .b", 1, 3, "") != 1 { return 148 }
+    if check_query("{\"xs\":[20,22]}", ".xs | add | . + 0", 1, 0, "42") != 1 { return 149 }
+    # tostring / tonumber round both ways
+    if check_query("{\"n\":42}", ".n | tostring", 1, 0, "\"42\"") != 1 { return 150 }
+    if check_query("{\"a\":[1,2]}", ".a | tostring", 1, 0, "\"[1,2]\"") != 1 { return 151 }
+    if check_query("\"42\"", ". | tonumber", 1, 0, "42") != 1 { return 152 }
+    if check_query("\"x1\"", ". | tonumber", 1, 3, "") != 1 { return 153 }
+    if check_query("{\"n\":\"21\"}", ".n | tonumber | . * 2", 1, 0, "42") != 1 { return 154 }
     42
 }
 

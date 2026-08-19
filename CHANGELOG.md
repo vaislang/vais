@@ -4,6 +4,18 @@
 
 ### Added
 
+- vaisjq round 9, arithmetic and casts: a pipeline stage may compute
+  `<path> op <path or integer>` with one space-delimited `+`, `-`,
+  `*`, or `/` — both operands must be numbers, division by zero and
+  integer-band overflow are loud, and the right-hand path rides the
+  same passive atom slot as select comparisons, so
+  `.xs | add | . / 3` averages and `.a + .b | tostring | "sum=\(.)"`
+  composes with templates. `tostring` passes strings through and
+  renders everything else as compact JSON; `tonumber` passes numbers
+  and parses integer strings with band and length guards, rejecting
+  the rest loudly. Self-test grows to 154 cases and the workflow
+  gate adds four round-9 cases.
+
 - vaisjq round 8, comparisons and composition: select conditions
   accept a path on the right-hand side (`select(.a == .b)`) — `==`
   and `!=` compare deeply (arrays elementwise, objects by key set

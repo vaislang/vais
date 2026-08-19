@@ -22,7 +22,22 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-18) — vaisjq 8라운드: 경로 비교/not/객체 템플릿
+## 현재 작업 (2026-08-19) — 잔여 후보 3건 일괄 (사용자 지시)
+모드: 개별선택 — vaisjq 9라운드 → vaislisp 풀 캡 파티션 → 표면 5라운드
+- [x] 1. vaisjq 9라운드 ✅ 2026-08-19 — 산술 스테이지 `<path> op
+      <path|정수>`(스테이지당 공백 구분 단일 이항 op, 수 전용,
+      0-나눗셈·밴드 오버플로 LOUD, RHS 경로=passive atom 재사용,
+      seg_pay=atom*8+op 팩킹) + tostring(비문자열=compact 렌더) +
+      tonumber(정수 문자열, 길이 16 선가드). `.xs | add | . / 3`
+      평균, `.a + .b | tostring | "sum=\(.)"` 합성. self-test
+      143~154(154케이스), 게이트 +4(55케이스).
+- [x] 1b. 9라운드 래더 ✅ — fmt/workflow/test.sh 417/parity 417/
+      release GREEN, 커밋.
+- [ ] 2. vaislisp 풀/힙 캡 파티션 (4095→8190, 2-way + 접근 헬퍼)
+- [ ] 3. vaislisp 표면 5라운드 (가변 인자 산술/mod/list-ref/str↔num)
+진행률: 1/3
+
+## 직전 완료 (2026-08-18) — vaisjq 8라운드: 경로 비교/not/객체 템플릿
 모드: 개별선택 (등록 후보 소화 — 비교·합성 마감)
 - [x] 1. 경로 간 비교 ✅ 2026-08-18 — select RHS가 경로면 **passive
       atom(op 15)**에 스팬을 싣고 owner는 litk 5로 참조(그룹 기계
