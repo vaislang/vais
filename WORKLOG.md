@@ -1,5 +1,17 @@
 # Vais Worklog
 
+## 2026-08-20d (vaisjq 11라운드 — del/leaf_paths/keys_unsorted)
+
+**del**(kind 28, atom op 14): del_path 재귀 — 마지막 세그먼트면
+컨테이너에서 대상 제외 재구축, 중간 레벨은 해당 자식만 교체 복사
+(나머지 자식은 셀 공유), 결측 경로는 **원본 그대로 반환**(jq no-op
+— changed 플래그로 무복사), null 통과·타입 위반 LOUD.
+**leaf_paths**(kind 29): collect_paths에 leaves_only 플래그(9-param)
+— 컨테이너 타깃 제외. **keys_unsorted**(tail 3): keys의 삽입 순서
+자매 — 정렬 분기만 스킵.
+
+첫 빌드 170케이스 정답, 컴파일러 무변경. 게이트 vaisjq 61케이스.
+
 ## 2026-08-20c (v1.5.0 릴리스 컷)
 
 v1.4.0 이후 8커밋 회전 고정: **vaisjq 6~10라운드**(group_by 수제

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- vaisjq round 11, editing and path variants: `del(<path>)` rebuilds
+  the value without the addressed subvalue — nested fields and array
+  indexes (negatives from the end) both work, a missing path is a
+  no-op jq-style, and indexing the wrong container type is loud;
+  `leaf_paths` narrows `paths` to non-container targets; and
+  `keys_unsorted` joins `| keys` as the insertion-order sibling.
+  Self-test grows to 170 cases and the workflow gate adds three
+  round-11 cases.
+
 ## v1.5.0 - 2026-08-20
 
 ### Added

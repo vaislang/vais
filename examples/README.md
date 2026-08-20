@@ -423,7 +423,8 @@ an integer JSON parser over tagged-Int values (string pool plus a shared
 `group_by(.path)`, `to_entries`/`from_entries`, `reverse`, quoted-key
 paths, `.[a:b]` slices, `any`/`all`/`not`, path-to-path select
 comparisons with deep equality, template values in object construction,
-arithmetic stages, `tostring`/`tonumber`, `recurse`, `paths`,
+arithmetic stages, `tostring`/`tonumber`, `recurse`, `paths`/`leaf_paths`,
+`del(...)`, `keys_unsorted`,
 `| length` / `| keys`), pretty and compact rendering, and loud
 parse/type/file errors,
 `examples/e397_sixteen_params.vais` for sixteen-parameter functions on both

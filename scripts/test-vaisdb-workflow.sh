@@ -526,6 +526,9 @@ expect_exit "vaisjq division by zero rejects loud" 3 /bin/sh -c "printf '{\"a\":
 expect_exit "vaisjq recurse emits every subvalue" 0 /bin/sh -c "printf '{\"a\":{\"b\":1}}' | '$jq_dist/bin/vaisjq' -c '. | recurse' | tr '\n' ' ' | grep -q '{\"a\":{\"b\":1}} {\"b\":1} 1 '"
 expect_exit "vaisjq recurse composes with select" 0 /bin/sh -c "printf '{\"users\":[{\"n\":5},{\"n\":9}]}' | '$jq_dist/bin/vaisjq' '. | recurse | select(. == 9)' | grep -qx '9'"
 expect_exit "vaisjq paths lists key and index trails" 0 /bin/sh -c "printf '{\"a\":{\"b\":1},\"c\":[2]}' | '$jq_dist/bin/vaisjq' -c '. | paths' | tr '\n' ' ' | grep -q '\[\"a\"\] \[\"a\",\"b\"\] \[\"c\"\] \[\"c\",0\] '"
+expect_exit "vaisjq del drops a nested field" 0 /bin/sh -c "printf '{\"a\":{\"b\":1,\"c\":2}}' | '$jq_dist/bin/vaisjq' -c '. | del(.a.b)' | grep -qx '{\"a\":{\"c\":2}}'"
+expect_exit "vaisjq leaf_paths keeps only leaves" 0 /bin/sh -c "printf '{\"a\":{\"b\":1},\"c\":2}' | '$jq_dist/bin/vaisjq' -c '. | leaf_paths' | tr '\n' ' ' | grep -q '\[\"a\",\"b\"\] \[\"c\"\] '"
+expect_exit "vaisjq keys_unsorted keeps insertion order" 0 /bin/sh -c "printf '{\"b\":1,\"a\":2}' | '$jq_dist/bin/vaisjq' -c '. | keys_unsorted' | grep -qx '\[\"b\",\"a\"\]'"
 
 vbox_dist="$tmp/vaisbox-dist"
 vbox_bin="$tmp/vaisbox-bin"
