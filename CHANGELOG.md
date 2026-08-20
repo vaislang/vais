@@ -4,6 +4,16 @@
 
 ### Added
 
+- vaiscalc, the sixteenth installable tool and third parser-class
+  program: an integer expression calculator by recursive descent
+  with precedence — `+ - * / %`, parentheses, unary minus, free
+  whitespace — over (value, next) tuples with errors riding an
+  out-parameter list so the parser stays total. Unexpected bytes,
+  unbalanced parentheses, division or modulo by zero, and trailing
+  garbage exit 3 loudly. Sixteen self-test cases, six workflow gate
+  cases, and vaisbox dispatches it as roster applet sixteen
+  (16 * 3 - 6 = 42).
+
 - vaislisp surface round 6: `(length x)` counts cons chains, string
   bytes, and nil as zero; `(append l...)` joins lists left to right
   with the last argument as the shared tail, Scheme-style, empty

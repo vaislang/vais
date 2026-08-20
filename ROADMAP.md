@@ -32,8 +32,12 @@ This file tracks current work and completed gate-backed language surface.
       (가변, Scheme 공유 꼬리, 빈=nil)/reverse. words.lisp 수제
       rev·len→내장 교체(잠긴 출력 불변=회귀 증명). self-test 55/
       게이트 vaislisp 38케이스.
-- [ ] 3. vaiscalc — 우선순위 수식 파서(16호, vaisbox 로스터 16)
-진행률: 1/3
+- [x] 3. vaiscalc ✅ 2026-08-20 — e399(16호, 파서 클래스 3호):
+      재귀 하강 우선순위(+ - * / %/괄호/단항 -/자유 공백), 오류는
+      아웃파람 리스트로 총함수 유지(예상외 바이트/불균형 괄호/0
+      나눗셈·모듈로/트레일링 exit 3). self-test 16케이스, 게이트
+      +6, vaisbox 로스터 16(16*3-6=42), parity 등록.
+진행률: 3/3 (100%)
 
 ## 직전 완료 (2026-08-20) — 잔여 후보 우선순위 일괄 (사용자 지시)
 모드: 개별선택 — ① 리터럴 캐시 → ② vaisjq 10라운드 → ③ v1.5.0 컷

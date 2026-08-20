@@ -427,6 +427,10 @@ arithmetic stages, `tostring`/`tonumber`, `recurse`, `paths`/`leaf_paths`,
 `del(...)`, `keys_unsorted`,
 `| length` / `| keys`), pretty and compact rendering, and loud
 parse/type/file errors,
+`examples/e399_vaiscalc_package` for the installable vaiscalc integer
+expression calculator — recursive descent with precedence, parentheses,
+unary minus, modulo, and loud error exits — the third parser-class
+program,
 `examples/e397_sixteen_params.vais` for sixteen-parameter functions on both
 engines (Int, Str, and List parameters mixed; seventeen rejects at the
 front),

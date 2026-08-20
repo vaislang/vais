@@ -424,3 +424,4 @@ examples/e395_one_line_fn_bodies.vais	native-supported	One-line fn bodies normal
 examples/e396_vaisjq_package/src/main.vais	native-supported	vaisjq: integer JSON parser and jq-subset query tool over tagged-Int values (fields, indexes, iteration, length/keys, pretty and compact rendering).
 examples/e397_sixteen_params.vais	native-supported	Functions carry sixteen parameters on both engines (self-host Fn slots p0..p15; seventeen rejects at the front).
 examples/e398_unary_minus.vais	native-supported	Unary minus as a factor: folded literals, negated variables and calls, and negative list-literal elements.
+examples/e399_vaiscalc_package/src/main.vais	native-supported	vaiscalc: integer expression calculator with precedence, parentheses, unary minus, and loud error exits.

@@ -1,0 +1,210 @@
+# expect: 42
+# vaiscalc: an integer expression calculator — the sixteenth
+# installable tool and the third parser-class program. Recursive
+# descent with precedence over the source bytes, (value, next)
+# tuples: expr = term ((+|-) term)*, term = factor ((*|/|%) factor)*,
+# factor = INT | -factor | ( expr ). Whitespace is free; unexpected
+# bytes, unbalanced parentheses, division or modulo by zero, and
+# trailing garbage report to stderr with exit 3. Errors ride an
+# out-parameter list so the parser stays total.
+#
+# Modes: no arguments runs the deterministic self-test (the
+# release-corpus entry); `vaiscalc "<expr>"` prints the value and
+# exits 0.
+
+fn eprint(msg: Str) -> Int {
+    let w = stderr_write(msg)
+    let lf = stderr_write(str_byte(10))
+    0
+}
+
+fn calc_ws(s: Str, pos: Int) -> Int {
+    let n = s.len()
+    let mut p = pos
+    while p < n {
+        let c = s[p]
+        if c != 32 and c != 9 { return p }
+        p += 1
+    }
+    p
+}
+
+fn parse_factor(s: Str, pos: Int, err: List<Str>) -> (Int, Int) {
+    let p0 = calc_ws(s, pos)
+    if p0 >= s.len() {
+        err.push("unexpected end of expression")
+        return (0, p0)
+    }
+    let c = s[p0]
+    if c == 45 {
+        let (fv, fp) = parse_factor(s, p0 + 1, err)
+        return (0 - fv, fp)
+    }
+    if c == 40 {
+        let (ev, ep) = parse_expr(s, p0 + 1, err)
+        let pc = calc_ws(s, ep)
+        if pc >= s.len() {
+            err.push("missing closing parenthesis")
+            return (ev, pc)
+        }
+        if s[pc] != 41 {
+            err.push("missing closing parenthesis")
+            return (ev, pc)
+        }
+        return (ev, pc + 1)
+    }
+    if c < 48 or c > 57 {
+        err.push("expected a number, -, or (")
+        return (0, p0)
+    }
+    let mut acc = 0
+    let mut p = p0
+    let mut digs = 0
+    while p < s.len() {
+        let d = s[p]
+        if d < 48 or d > 57 { break }
+        acc = acc * 10 + (d - 48)
+        digs += 1
+        p += 1
+    }
+    if digs > 18 {
+        err.push("number is too large")
+        return (0, p)
+    }
+    (acc, p)
+}
+
+fn parse_term(s: Str, pos: Int, err: List<Str>) -> (Int, Int) {
+    let (first, fp) = parse_factor(s, pos, err)
+    if err.len() > 0 { return (0, fp) }
+    let mut acc = first
+    let mut p = fp
+    let mut going = 1
+    while going == 1 {
+        let sp = calc_ws(s, p)
+        if sp >= s.len() {
+            going = 0
+            p = sp
+        } else {
+            let c = s[sp]
+            if c == 42 or c == 47 or c == 37 {
+                let (rhs, rp) = parse_factor(s, sp + 1, err)
+                if err.len() > 0 { return (0, rp) }
+                if c == 42 {
+                    acc = acc * rhs
+                } else {
+                    if rhs == 0 {
+                        err.push("division or modulo by zero")
+                        return (0, rp)
+                    }
+                    if c == 47 {
+                        acc = acc / rhs
+                    } else {
+                        acc = acc - (acc / rhs) * rhs
+                    }
+                }
+                p = rp
+            } else {
+                going = 0
+                p = sp
+            }
+        }
+    }
+    (acc, p)
+}
+
+fn parse_expr(s: Str, pos: Int, err: List<Str>) -> (Int, Int) {
+    let (first, fp) = parse_term(s, pos, err)
+    if err.len() > 0 { return (0, fp) }
+    let mut acc = first
+    let mut p = fp
+    let mut going = 1
+    while going == 1 {
+        let sp = calc_ws(s, p)
+        if sp >= s.len() {
+            going = 0
+            p = sp
+        } else {
+            let c = s[sp]
+            if c == 43 or c == 45 {
+                let (rhs, rp) = parse_term(s, sp + 1, err)
+                if err.len() > 0 { return (0, rp) }
+                if c == 43 {
+                    acc = acc + rhs
+                } else {
+                    acc = acc - rhs
+                }
+                p = rp
+            } else {
+                going = 0
+                p = sp
+            }
+        }
+    }
+    (acc, p)
+}
+
+fn calc(s: Str, err: List<Str>) -> Int {
+    let (v, np) = parse_expr(s, 0, err)
+    if err.len() > 0 { return 0 }
+    let rest = calc_ws(s, np)
+    if rest < s.len() {
+        err.push("trailing bytes after the expression")
+        return 0
+    }
+    v
+}
+
+fn check(src: Str, want: Int) -> Int {
+    let err: List<Str> = []
+    let got = calc(src, err)
+    if err.len() > 0 { return 0 }
+    if got != want { return 0 }
+    1
+}
+
+fn check_err(src: Str) -> Int {
+    let err: List<Str> = []
+    let got = calc(src, err)
+    if err.len() > 0 { return 1 }
+    0
+}
+
+fn self_test() -> Int {
+    if check("42", 42) != 1 { return 1 }
+    if check("1 + 2 * 4", 9) != 1 { return 2 }
+    if check("(1 + 2) * 14", 42) != 1 { return 3 }
+    if check("100 - 58", 42) != 1 { return 4 }
+    if check("-8 + 50", 42) != 1 { return 5 }
+    if check("84 / 2", 42) != 1 { return 6 }
+    if check("100 % 29 + 29", 42) != 1 { return 7 }
+    if check("2 * (3 + 4) * 3", 42) != 1 { return 8 }
+    if check("-(10 - 52)", 42) != 1 { return 9 }
+    if check("  7*6  ", 42) != 1 { return 10 }
+    if check("1 + 2 * (3 - 1)", 5) != 1 { return 11 }
+    if check_err("1 +") != 1 { return 12 }
+    if check_err("(1 + 2") != 1 { return 13 }
+    if check_err("4 / 0") != 1 { return 14 }
+    if check_err("7 seven") != 1 { return 15 }
+    if check_err("") != 1 { return 16 }
+    42
+}
+
+fn usage() -> Int {
+    print("usage: vaiscalc              (self-test)")
+    print("       vaiscalc \"<expr>\"")
+    2
+}
+
+fn main() -> Int {
+    if proc_argc() == 0 { return self_test() }
+    if proc_argc() != 1 { return usage() }
+    let err: List<Str> = []
+    let v = calc(proc_arg(0), err)
+    if err.len() > 0 {
+        eprint(f"error: {err[0]}")
+        return 3
+    }
+    print(f"{v}")
+    0
+}

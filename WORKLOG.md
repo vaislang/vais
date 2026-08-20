@@ -1,5 +1,15 @@
 # Vais Worklog
 
+## 2026-08-20f (vaiscalc — 16호 도구, 파서 클래스 3호)
+
+재귀 하강 우선순위 계산기: expr=term((+|-)term)*, term=factor
+((*|/|%)factor)*, factor=INT|-factor|(expr) — (value,next) 튜플
+직접 바이트 스캔(토큰 리스트 없이). **오류 채널 설계**: 전 정수가
+유효 결과라 vaisjq식 err 밴드 불가 → **아웃파람 List<Str> err**로
+총함수 유지(파스 fn들이 err.len() 검사 후 조기 반환, calc가 트레일링
+검사). 숫자 18자리 가드. vaisbox 로스터 16(산술 16*3-6=42),
+게이트 vaiscalc 6케이스+디스패치. 첫 빌드 전부 정답.
+
 ## 2026-08-20e (vaislisp 표면 6라운드 — length/append/reverse)
 
 length(cons 체인 카운트/문자열 바이트/nil→0, 기타 LOUD), append
