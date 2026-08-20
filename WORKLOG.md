@@ -1,5 +1,14 @@
 # Vais Worklog
 
+## 2026-08-20e (vaislisp 표면 6라운드 — length/append/reverse)
+
+length(cons 체인 카운트/문자열 바이트/nil→0, 기타 LOUD), append
+(가변 — 마지막 인자를 공유 꼬리로 두고 앞 리스트들을 뒤에서부터
+heap_cons 접기: Scheme 의미), reverse(역접기). words.lisp의 수제
+rev/len defun 삭제→내장 교체, 잠긴 출력 "(vais lisp dog food)"/
+exit 42 불변 — 기존 게이트가 회귀 증명. self-test 55케이스, 게이트
+vaislisp 38케이스.
+
 ## 2026-08-20d (vaisjq 11라운드 — del/leaf_paths/keys_unsorted)
 
 **del**(kind 28, atom op 14): del_path 재귀 — 마지막 세그먼트면

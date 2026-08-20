@@ -4,6 +4,14 @@
 
 ### Added
 
+- vaislisp surface round 6: `(length x)` counts cons chains, string
+  bytes, and nil as zero; `(append l...)` joins lists left to right
+  with the last argument as the shared tail, Scheme-style, empty
+  call yielding nil; and `(reverse l)` builds the reversed list. The
+  words corpus program drops its hand-written rev and len helpers
+  for the builtins with locked outputs unchanged, self-test grows to
+  55 cases, and the workflow gate adds two round-6 cases.
+
 - vaisjq round 11, editing and path variants: `del(<path>)` rebuilds
   the value without the addressed subvalue — nested fields and array
   indexes (negatives from the end) both work, a missing path is a

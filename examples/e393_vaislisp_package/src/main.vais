@@ -12,8 +12,9 @@
 #
 # Surface: variadic (+ - * /) folding left ((+) is 0, (*) is 1,
 # (- x) negates, / needs two operands), binary (< > =), (mod a b),
-# (list-ref l n), (str->num s) / (num->str n), (if c a b) with b
-# optional (falsy without
+# (list-ref l n), (length x) over lists/strings/nil, (append l...)
+# with a Scheme shared tail, (reverse l), (str->num s) /
+# (num->str n), (if c a b) with b optional (falsy without
 # an else is nil), (cond (test body...) ... (else body...)), (and
 # e...) / (or e...) short-circuiting with value semantics, (define
 # name e), (set name e), (defun name (params...) body), (lambda
@@ -612,6 +613,81 @@ fn eval_at(toks: List<Str>, pos: Int, genv: Map<Str,Int>, fnames: List<Str>, fpa
         }
         return (acc, lp + 1)
     }
+    if head == "length" {
+        # (length x): cons-chain count for lists, byte length for
+        # strings, 0 for nil; anything else is loud.
+        let (xl, xlp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
+        if xl == nil_val() { return (0, xlp + 1) }
+        if is_str_val(xl) == 1 {
+            return (pool_str(xl, spool, spool2).len(), xlp + 1)
+        }
+        if is_cons_val(xl) == 0 {
+            print("error: length needs a list, string, or nil")
+            return (0, xlp + 1)
+        }
+        let mut lcnt = 0
+        let mut lc = xl
+        while is_cons_val(lc) == 1 {
+            lcnt += 1
+            lc = heap_cdr(lc, cdrs, cdrs2)
+        }
+        return (lcnt, xlp + 1)
+    }
+    if head == "append" {
+        # (append l...) joins lists left to right; the last argument
+        # becomes the shared tail, Scheme-style. Empty is nil.
+        let avals: List<Int> = []
+        let mut app = pos + 2
+        while toks[app] != ")" {
+            let (aev, aenp) = eval_at(toks, app, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
+            avals.push(aev)
+            app = aenp
+        }
+        if avals.len() == 0 { return (nil_val(), app + 1) }
+        let mut ai3 = 0
+        while ai3 < avals.len() {
+            let avv = avals[ai3]
+            if avv != nil_val() {
+                if is_cons_val(avv) == 0 {
+                    print("error: append needs lists")
+                    return (nil_val(), app + 1)
+                }
+            }
+            ai3 += 1
+        }
+        let mut acc5 = avals[avals.len() - 1]
+        let mut li3 = avals.len() - 1
+        while li3 > 0 {
+            li3 -= 1
+            let items2: List<Int> = []
+            let mut sc = avals[li3]
+            while is_cons_val(sc) == 1 {
+                items2.push(heap_car(sc, cars, cars2))
+                sc = heap_cdr(sc, cdrs, cdrs2)
+            }
+            let mut ri3 = items2.len()
+            while ri3 > 0 {
+                ri3 -= 1
+                acc5 = heap_cons(items2[ri3], acc5, cars, cars2, cdrs, cdrs2)
+            }
+        }
+        return (acc5, app + 1)
+    }
+    if head == "reverse" {
+        let (rl, rlp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
+        if rl == nil_val() { return (nil_val(), rlp + 1) }
+        if is_cons_val(rl) == 0 {
+            print("error: reverse needs a list")
+            return (nil_val(), rlp + 1)
+        }
+        let mut racc2 = nil_val()
+        let mut rc2 = rl
+        while is_cons_val(rc2) == 1 {
+            racc2 = heap_cons(heap_car(rc2, cars, cars2), racc2, cars, cars2, cdrs, cdrs2)
+            rc2 = heap_cdr(rc2, cdrs, cdrs2)
+        }
+        return (racc2, rlp + 1)
+    }
     if head == "null?" {
         let (nv, nnp) = eval_at(toks, pos + 2, genv, fnames, fparams, fbodies, spool, spool2, cars, cars2, cdrs, cdrs2)
         let mut isn = 0
@@ -992,6 +1068,13 @@ fn self_test() -> Int {
     if eval_source("(list-ref '(40 41 42) 2)") != 42 { return 47 }
     if eval_source("(* (str->num \"21\") 2)") != 42 { return 48 }
     if eval_source("(+ 40 (str-len (num->str 42)))") != 42 { return 49 }
+    # length, append, reverse over lists and strings
+    if eval_source("(* (length (list 1 2 3)) 14)") != 42 { return 50 }
+    if eval_source("(+ (length nil) (length \"abc\") 39)") != 42 { return 51 }
+    if eval_source("(length (append (list 1 2) (list 3) nil))") != 3 { return 52 }
+    if eval_source("(if (null? (append)) 42 0)") != 42 { return 53 }
+    if eval_source("(car (reverse (list 1 2 42)))") != 42 { return 54 }
+    if eval_source("(list-ref (append (list 1) (reverse (list 42 3))) 2)") != 42 { return 55 }
     42
 }
 

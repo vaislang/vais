@@ -461,6 +461,8 @@ expect_exit "vaislisp deduped partitioned pools survive hot loops" 42 /bin/sh -c
 expect_exit "vaislisp variadic arithmetic folds" 0 /bin/sh -c "printf '(+ 1 2 3 36)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
 expect_exit "vaislisp mod and casts compose" 0 /bin/sh -c "printf '(num->str (mod 100 29))\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 13'"
 expect_exit "vaislisp list-ref indexes lists" 0 /bin/sh -c "printf '(list-ref (list 40 41 42) 2)\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
+expect_exit "vaislisp append joins with shared tail" 0 /bin/sh -c "printf '(append (list 1 2) (list 3 4))\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= (1 2 3 4)'"
+expect_exit "vaislisp length and reverse builtins" 0 /bin/sh -c "printf '(+ (length \"vaislisp\") (car (reverse (list 1 34))))\n' | '$lisp_dist/bin/vaislisp' repl | grep -qx '= 42'"
 
 # vaisjq: the integer JSON parser / jq-subset query tool — self-test,
 # path queries, iteration, pipe tails, both render modes, and the

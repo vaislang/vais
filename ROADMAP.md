@@ -28,7 +28,10 @@ This file tracks current work and completed gate-backed language surface.
       공유, 결측 no-op, 타입 위반 LOUD, atom op 14)/leaf_paths
       (collect_paths leaves_only 플래그)/keys_unsorted(tail 3 —
       삽입 순서). self-test 170/게이트 vaisjq 61케이스.
-- [ ] 2. vaislisp 표면 6라운드 (length/append/reverse + 코퍼스 리라이트)
+- [x] 2. vaislisp 표면 6라운드 ✅ — length(리스트/문자열/nil)/append
+      (가변, Scheme 공유 꼬리, 빈=nil)/reverse. words.lisp 수제
+      rev·len→내장 교체(잠긴 출력 불변=회귀 증명). self-test 55/
+      게이트 vaislisp 38케이스.
 - [ ] 3. vaiscalc — 우선순위 수식 파서(16호, vaisbox 로스터 16)
 진행률: 1/3
 
