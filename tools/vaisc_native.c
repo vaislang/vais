@@ -17268,7 +17268,9 @@ static char *lower_tuple_return_line(const char *line, const char *struct_name, 
                 if (close >= 0) {
                     const char *tail = skip_ws(line + close + 1);
                     if (*tail == ';') tail = skip_ws(tail + 1);
-                    if (*tail == '\0' || *tail == '}') {
+                    /* `#` starts a trailing line comment: the tuple literal
+                     * still ends the statement. */
+                    if (*tail == '\0' || *tail == '}' || *tail == '#') {
                         char *inside = substr_copy(value + 1, (size_t)(line + close - value - 1));
                         char *parts[8] = {0};
                         int count = split_top_level_commas_c(inside, parts, 8);
@@ -17321,7 +17323,11 @@ static int lower_tuple_destructure_line(const char *line, TupleLowerInfo *info, 
     if (call_close < 0) return 0;
     const char *tail = skip_ws(line + call_close + 1);
     if (*tail == ';') tail = skip_ws(tail + 1);
-    if (*tail != '\0') return 0;
+    /* A trailing line comment is part of the statement's line, not of
+     * the call: accept it here (it rides along on the temp binding) so
+     * the direct engine never meets an unlowered `let (` because the
+     * author annotated the line. */
+    if (*tail != '\0' && *tail != '#') return 0;
 
     char *vars_raw = substr_copy(open + 1, (size_t)(line + close - open - 1));
     char *vars[8] = {0};

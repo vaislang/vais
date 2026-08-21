@@ -425,3 +425,4 @@ examples/e396_vaisjq_package/src/main.vais	native-supported	vaisjq: integer JSON
 examples/e397_sixteen_params.vais	native-supported	Functions carry sixteen parameters on both engines (self-host Fn slots p0..p15; seventeen rejects at the front).
 examples/e398_unary_minus.vais	native-supported	Unary minus as a factor: folded literals, negated variables and calls, and negative list-literal elements.
 examples/e399_vaiscalc_package/src/main.vais	native-supported	vaiscalc: integer expression calculator with precedence, parentheses, unary minus, and loud error exits.
+examples/e400_tuple_trailing_comments.vais	native-supported	Tuple header, return, and destructure lines accept trailing line comments on both engines.

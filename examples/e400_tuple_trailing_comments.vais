@@ -1,0 +1,15 @@
+# expect: 42
+# Tuple headers, tuple returns, and tuple destructures may carry a
+# trailing line comment on both engines. The shared tuple lowering used
+# to require the call or literal to end the line, so an annotated
+# `let (a, b) = f(...)  # note` reached the direct engine unlowered.
+
+fn split_pair(v: Int) -> (Int, Int) {                # tens and ones
+    return (v / 10, v - (v / 10) * 10)               # literal then comment
+}
+
+fn main() -> Int {
+    let (tens, ones) = split_pair(42)                 # 4, 2
+    let (a, b) = split_pair(10);                      # semicolon form
+    return tens * 10 + ones + a - b - 1
+}
