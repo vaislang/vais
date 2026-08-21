@@ -22,7 +22,25 @@ This file tracks current work and completed gate-backed language surface.
 - `git diff --check`
 - `bash scripts/test-release-gates.sh`
 
-## 현재 작업 (2026-08-20d) — 후보 전체 일괄 2차 (사용자 지시)
+## 현재 작업 (2026-08-20g) — 전체 기능 한 장 문서 + 경유 root-fix
+모드: 개별선택 (사용자 요청 — 이해용 단일 문서)
+- [x] 1. docs/OVERVIEW.ko.md ✅ 2026-08-20 — 구조 그림/언어 표면/호스트
+      API 표/vaisc·게이트 래더/도구 17종/vaisdb·vaislisp·vaisjq·
+      vaiscalc 기능 표/한계/검증 규율/5분 투어/용어 사전. **문서의
+      코드 예시·투어 명령은 양 엔진 실행으로 검증**(문서=검증 원칙).
+- [x] 2. 경유 root-fix ✅ — 예시 작성이 드러낸 엔진 발산: 튜플
+      구조분해/return 줄의 **트레일링 `#` 주석**을 공용 튜플 로워링이
+      문장 끝으로 안 봐 direct만 거부(full 수용). 두 인식기에 `#`
+      종결 허용, e400 잠금(헤더/return/구조분해/세미콜론형).
+- [x] 3. 전체 래더 ✅ — front/direct/fixpoint-full/test.sh 419/parity
+      419/self-host/release 전부 GREEN.
+진행률: 3/3 (100%)
+
+### 다음 후보 (2026-08-20 문서 작성 환류)
+- 한 줄 `for`/`while` 본문(`for v in xs { acc += v }`): full 수용·direct
+  LOUD 거부 — 문장 분할기가 fn 본문만 정규화. 어느 쪽이든 일치 필요.
+
+## 직전 완료 (2026-08-20d) — 후보 전체 일괄 2차 (사용자 지시)
 모드: 개별선택 — ① vaisjq 11R → ② vaislisp 표면 6R → ③ vaiscalc(16호)
 - [x] 1. vaisjq 11라운드 ✅ 2026-08-20 — del(<path>)(스파인 재구축
       공유, 결측 no-op, 타입 위반 LOUD, atom op 14)/leaf_paths

@@ -1,5 +1,20 @@
 # Vais Worklog
 
+## 2026-08-20g (전체 기능 한 장 문서 — 경유 엔진 발산 2건 발견, 1건 root-fix)
+
+사용자 이해용 단일 문서 `docs/OVERVIEW.ko.md`(324줄). 원칙대로 문서의
+코드 예시를 양 엔진에서 실행했더니 **발산 2건**이 튀어나옴: ① 한 줄
+`for v in xs { acc += v }` — full 수용/direct LOUD(분할기가 fn 본문만
+처리) → 후보 등록, 예시는 멀티라인 관용으로; ② 튜플 구조분해 줄의
+트레일링 주석 — direct "expected an Int local binding". 이분 탐색
+(최소 프로브 통과 → 구조체/맵/for 조합 전부 통과 → **주석만 남김**)
+으로 `lower_tuple_destructure_line`의 `*tail != '\0'` 종결 검사가
+원인임을 확정, `#`을 문장 끝으로 허용. 같은 클래스로 `return (...)
+# c`의 `lower_tuple_return_line`도 수정. e400 잠금, parity 419.
+
+교훈: **문서 예시는 곧 테스트** — 예시를 실행하지 않았다면 두 발산이
+문서에 "동작하는 것처럼" 박제될 뻔했다.
+
 ## 2026-08-20f (vaiscalc — 16호 도구, 파서 클래스 3호)
 
 재귀 하강 우선순위 계산기: expr=term((+|-)term)*, term=factor

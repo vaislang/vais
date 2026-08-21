@@ -4,6 +4,31 @@
 
 ### Added
 
+- `docs/OVERVIEW.ko.md`: a single-page Korean map of the whole project
+  — what Vais is, the two-engine toolchain and self-host loop, the
+  language surface and host API, the gate ladder, all seventeen
+  installable tools, the vaisdb/vaislisp/vaisjq/vaiscalc feature
+  tables, honest limits, a five-minute tour, and a glossary. Its code
+  sample and tour commands are executed against both engines.
+
+### Fixed
+
+- Tuple lines tolerate trailing comments on both engines: the shared
+  tuple lowering required a destructure's call or a `return (...)`
+  literal to end the line, so an annotated
+  `let (a, b) = f(...)  # note` reached the direct engine unlowered
+  and was rejected as "expected an Int local binding" while the full
+  engine accepted it. Both recognizers now treat `#` as the end of
+  the statement; e400 locks header, return, and destructure comments
+  (with and without the semicolon form) on both engines.
+
+- Registered candidate from the same probe: a one-line `for`/`while`
+  body (`for v in xs { acc += v }`) is accepted by the full engine but
+  rejected by the direct engine — the statement splitter normalizes
+  one-line fn bodies only. Close the divergence either way.
+
+### Added
+
 - vaiscalc, the sixteenth installable tool and third parser-class
   program: an integer expression calculator by recursive descent
   with precedence — `+ - * / %`, parentheses, unary minus, free
